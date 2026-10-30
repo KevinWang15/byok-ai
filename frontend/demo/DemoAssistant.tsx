@@ -1,12 +1,11 @@
 import { useId } from 'react'
 import { Button, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
 import { ComposerPrimitive, MessagePrimitive, ThreadPrimitive, groupPartByType, useAuiState, type ToolCallMessagePartProps } from '@assistant-ui/react'
-import { AskAIChat, AskAIHistory, AskAIMessageActions, AskAIMessageContent, AskAIPanel, AskAITools, AskAITrigger, MarkdownText, useAskAI } from '../byok'
+import { AskAIChat, AskAIHistory, AskAIMessageActions, AskAIMessageContent, usePanelLayout, AskAIPanel, AskAITools, AskAITrigger, MarkdownText, useAskAI } from '../byok'
 
 import { DemoOrb } from './DemoOrb'
 import { DemoIcon as Icon, type DemoIconName } from './DemoIcon'
 import { getToolOrbState, useDemoOrbActivity } from './orb-state'
-import { useChatPanelSize } from './useChatPanelSize'
 import { useDraggableLauncher } from './useDraggableLauncher'
 import { DemoProviderSetup } from './DemoProviderSetup'
 
@@ -95,11 +94,11 @@ export function DemoAssistant() {
   const { title, connection, page, setPage, setOpen, newConversation, busy, storageError } = useAskAI()
   const activity = useDemoOrbActivity()
   const id = useId()
-  const panelSize = useChatPanelSize()
+  const panelSize = usePanelLayout({ storageKey: 'byok-ai:demo-panel:v1' })
   const launcher = useDraggableLauncher()
   const secondaryPage = Boolean(connection) && page !== 'chat'
   return <div data-byok="root" style={launcher.style} data-dragging={launcher.dragging}>
-    <AskAIPanel id={id} className="demo-chat-shell" style={panelSize.style}
+    <AskAIPanel id={id} {...panelSize.panelProps} className="demo-chat-shell" style={panelSize.style}
       data-maximized={panelSize.maximized} data-resizing={panelSize.resizing}
       data-positioned={panelSize.positioned} data-moving={panelSize.moving}>
       <header className="chat-header" aria-label="Move chat window" aria-describedby={id + '-move-window-help'} {...panelSize.headerProps}>

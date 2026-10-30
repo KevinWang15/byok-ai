@@ -91,7 +91,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 [data-byok="root"][data-dragging="true"] > [data-byok="trigger"] { cursor: grabbing; }
 [data-byok="trigger"] { display: inline-flex; align-items: center; gap: 10px; padding: 15px 23px; border: 1px solid #fff; border-radius: 40px; color: #4f4262; background: linear-gradient(120deg, #f9e7f2f5, #ece8fff5); backdrop-filter: blur(20px); font-size: 13px; font-weight: 550; box-shadow: 0 6px 28px #74628524; }
 [data-byok="dialog"] { position: fixed; bottom: 92px; right: 28px; z-index: 1000; font-size: 13px; color: #423b4c; }
-.demo-chat-shell { position: relative; box-sizing: border-box; display: flex; flex-direction: column; width: min(var(--chat-width, 480px), calc(100vw - 44px)); height: min(var(--chat-height, min(720px, calc(100dvh - 124px))), calc(100dvh - 108px)); overflow: hidden; border: 1px solid #ffffffed; background: #fefcfff5; border-radius: 24px; box-shadow: 0 22px 85px #47325926, 0 3px 12px #6951790a; backdrop-filter: blur(28px); }
+.demo-chat-shell { position: relative; box-sizing: border-box; display: flex; flex-direction: column; width: min(var(--byok-panel-width, 480px), calc(100vw - 44px)); height: min(var(--byok-panel-height, min(720px, calc(100dvh - 124px))), calc(100dvh - 108px)); overflow: hidden; border: 1px solid #ffffffed; background: #fefcfff5; border-radius: 24px; box-shadow: 0 22px 85px #47325926, 0 3px 12px #6951790a; backdrop-filter: blur(28px); }
 .demo-chat-shell button { color: inherit; }
 .demo-chat-shell button:disabled { opacity: .4; cursor: not-allowed; }
 .demo-chat-shell [hidden] { display: none!important; }
@@ -247,7 +247,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 .demo-chat-shell [role="alert"], .demo [role="alert"] { margin: 8px 18px; font-size: 11px; line-height: 1.6; color: #a56e86; background: #fcf0f5; padding: 10px; border-radius: 8px; }
 @media (max-width: 640px) {
   [data-byok="root"] { bottom: 16px; right: 16px; }[data-byok="dialog"] { right: 12px; bottom: 80px; }
-  .demo-chat-shell { width: min(var(--chat-width, calc(100vw - 24px)), calc(100vw - 24px)); height: min(var(--chat-height, 720px), calc(100dvh - 98px)); border-radius: 20px; }
+  .demo-chat-shell { width: min(var(--byok-panel-width, calc(100vw - 24px)), calc(100vw - 24px)); height: min(var(--byok-panel-height, 720px), calc(100dvh - 98px)); border-radius: 20px; }
   .chat-header { padding: 17px 14px; gap: 8px; }.chat-header-actions { gap: 0; }.chat-title > span { max-width: 135px; }.chat-icon-button { width: 29px; height: 30px; padding: 6px; }
   .demo-chat-shell [data-byok="messages"] { padding: 20px 17px 6px; }.chat-user-message { padding-left: 22px; }
   .chat-compose-area { padding: 12px 14px; }.chat-empty { padding-top: 8px; }
@@ -266,9 +266,9 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 /* A moved panel owns its viewport position; its portal must not block the page outside it. */
 [data-byok="dialog"]:has(.demo-chat-shell[data-positioned="true"]) { inset: 0; pointer-events: none; }
 .demo-chat-shell[data-positioned="true"] { --chat-margin: 16px; position: fixed; pointer-events: auto;
-  left: calc(var(--chat-x) * (100vw - 2 * var(--chat-margin)) + var(--chat-margin));
-  top: calc(var(--chat-y) * (100dvh - 2 * var(--chat-margin)) + var(--chat-margin));
-  transform: translate(calc(var(--chat-x) * -100%), calc(var(--chat-y) * -100%));
+  left: calc(var(--byok-panel-x) * (100vw - 2 * var(--chat-margin)) + var(--chat-margin));
+  top: calc(var(--byok-panel-y) * (100dvh - 2 * var(--chat-margin)) + var(--chat-margin));
+  transform: translate(calc(var(--byok-panel-x) * -100%), calc(var(--byok-panel-y) * -100%));
 }
 .chat-header { cursor: grab; touch-action: none; user-select: none; }
 .chat-header:focus-visible { outline-offset: -3px; }

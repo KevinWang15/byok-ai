@@ -1,6 +1,8 @@
 export { AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIMessageActions, AskAIHistory, AskAITools } from './AskAI'
 export { AskAIProvider } from './AskAIProvider'
 export { useAskAI } from './context'
+export { usePanelLayout } from './usePanelLayout'
+export type { PanelLayoutOptions } from './usePanelLayout'
 export type { AskAIContextValue, AskAIPage, ProviderConnection } from './context'
 export { createBrowserAdapter, toModelMessages } from './agent'
 export { defaultProviders } from './providers'

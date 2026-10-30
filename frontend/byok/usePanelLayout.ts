@@ -4,18 +4,19 @@ type Size = { width: number; height: number }
 type Position = { x: number; y: number }
 type Preferences = { size?: Size; position?: Position; maximized: boolean }
 type Direction = 'width' | 'height' | 'both'
-const storageKey = 'byok-ai:demo-panel:v1'
-const clamp = (value: number) => Math.max(0, Math.min(1, value))
-function positionFor(left: number, top: number, width: number, height: number): Position {
-  const margin = window.innerWidth <= 640 ? 12 : 16
-  return {
-    x: clamp((left - margin) / Math.max(1, window.innerWidth - width - margin * 2)),
-    y: clamp((top - margin) / Math.max(1, window.innerHeight - height - margin * 2)),
-  }
+export interface PanelLayoutOptions {
+  /** localStorage key for the size, position and maximized state. */
+  storageKey: string
+  /** Space kept between the panel and the viewport edge, in pixels. Default 16, or 12 at 640px wide and below. */
+  margin?: () => number
+  /** Smallest width and height a resize allows. Default 320. */
+  minSize?: number
 }
-function loadPreferences(): Preferences {
+const defaultMargin = () => window.innerWidth <= 640 ? 12 : 16
+const clamp = (value: number) => Math.max(0, Math.min(1, value))
+function loadPreferences(key: string): Preferences {
   try {
-    const saved = JSON.parse(localStorage.getItem(storageKey) ?? 'null')
+    const saved = JSON.parse(localStorage.getItem(key) ?? 'null')
     const size = saved?.size
     const position = saved?.position
     return {
@@ -27,27 +28,45 @@ function loadPreferences(): Preferences {
   } catch { return { maximized: false } }
 }
 
-/** Demo window geometry only; the headless chat runtime is independent of panel size. */
-export function useChatPanelSize() {
-  const [preferences, setPreferences] = useState(loadPreferences)
+/**
+ * Headless geometry for a floating panel: move by dragging a header, resize from the
+ * top and left edges, and maximize. Mouse, touch and arrow keys (Shift for larger
+ * steps); Escape cancels a move. Saved to localStorage. Spread `panelProps` on the
+ * panel (it marks it with `data-byok-panel`, which the header and handles inside it
+ * measure), `headerProps` and `handleProps(direction)`, and apply `style`:
+ * `--byok-panel-width/height` (px) once resized, `--byok-panel-x/y` (0–1 of the
+ * free space) once moved. Placement and sizing CSS belong to the consumer.
+ */
+export function usePanelLayout({ storageKey, margin = defaultMargin, minSize = 320 }: PanelLayoutOptions) {
+  const [preferences, setPreferences] = useState(() => loadPreferences(storageKey))
   const [resizing, setResizing] = useState(false)
   const [moving, setMoving] = useState(false)
   const drag = useRef<{ x: number; y: number; width: number; height: number; right: number; bottom: number; direction: Direction } | null>(null)
   const move = useRef<{ pointerId: number; x: number; y: number; left: number; top: number; width: number; height: number; original?: Position; moved: boolean } | null>(null)
   useEffect(() => {
     if (resizing || moving) return
-    try { localStorage.setItem(storageKey, JSON.stringify(preferences)) } catch { /* Resizing still works when storage is unavailable. */ }
-  }, [preferences, resizing, moving])
+    try { localStorage.setItem(storageKey, JSON.stringify(preferences)) } catch { /* Layout still works when storage is unavailable. */ }
+  }, [preferences, resizing, moving, storageKey])
 
-  const resize = (width: number, height: number, bounds: { right: number; bottom: number }) => {
-    const maxWidth = Math.max(1, bounds.right - (window.innerWidth <= 640 ? 12 : 16))
-    const maxHeight = Math.max(1, bounds.bottom - 16)
+  // The panel containing the header or handle the event came from.
+  const bounds = (from: Element) => (from.closest('[data-byok-panel]') ?? from).getBoundingClientRect()
+  const positionFor = (left: number, top: number, width: number, height: number): Position => {
+    const m = margin()
+    return {
+      x: clamp((left - m) / Math.max(1, window.innerWidth - width - m * 2)),
+      y: clamp((top - m) / Math.max(1, window.innerHeight - height - m * 2)),
+    }
+  }
+  const resize = (width: number, height: number, edge: { right: number; bottom: number }) => {
+    const m = margin()
+    const maxWidth = Math.max(1, edge.right - m)
+    const maxHeight = Math.max(1, edge.bottom - m)
     const size = {
-      width: Math.min(maxWidth, Math.max(Math.min(320, maxWidth), width)),
-      height: Math.min(maxHeight, Math.max(Math.min(320, maxHeight), height)),
+      width: Math.min(maxWidth, Math.max(Math.min(minSize, maxWidth), width)),
+      height: Math.min(maxHeight, Math.max(Math.min(minSize, maxHeight), height)),
     }
     setPreferences(previous => ({ ...previous, size,
-      position: previous.position ? positionFor(bounds.right - size.width, bounds.bottom - size.height, size.width, size.height) : undefined,
+      position: previous.position ? positionFor(edge.right - size.width, edge.bottom - size.height, size.width, size.height) : undefined,
     }))
   }
   const finish = () => { drag.current = null; setResizing(false) }
@@ -59,37 +78,36 @@ export function useChatPanelSize() {
     setMoving(false)
   }
   const handleProps = (direction: Direction) => ({
-    onPointerDown(event: PointerEvent<HTMLButtonElement>) {
+    onPointerDown(event: PointerEvent<HTMLElement>) {
       if (event.button !== 0 || !event.isPrimary) return
-      const bounds = event.currentTarget.closest('.demo-chat-shell')!.getBoundingClientRect()
+      const b = bounds(event.currentTarget)
       event.preventDefault()
       event.currentTarget.focus()
       event.currentTarget.setPointerCapture(event.pointerId)
-      drag.current = { x: event.clientX, y: event.clientY, width: bounds.width, height: bounds.height,
-        right: bounds.right, bottom: bounds.bottom, direction }
+      drag.current = { x: event.clientX, y: event.clientY, width: b.width, height: b.height, right: b.right, bottom: b.bottom, direction }
       setResizing(true)
     },
-    onPointerMove(event: PointerEvent<HTMLButtonElement>) {
+    onPointerMove(event: PointerEvent<HTMLElement>) {
       const start = drag.current
       if (!start || !event.currentTarget.hasPointerCapture(event.pointerId)) return
       resize(start.width + (start.direction === 'height' ? 0 : start.x - event.clientX),
         start.height + (start.direction === 'width' ? 0 : start.y - event.clientY), start)
     },
-    onPointerUp(event: PointerEvent<HTMLButtonElement>) {
+    onPointerUp(event: PointerEvent<HTMLElement>) {
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
       finish()
     },
     onPointerCancel: finish,
     onLostPointerCapture: finish,
-    onKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
+    onKeyDown(event: KeyboardEvent<HTMLElement>) {
       const horizontal = direction !== 'height' && ['ArrowLeft', 'ArrowRight'].includes(event.key)
       const vertical = direction !== 'width' && ['ArrowUp', 'ArrowDown'].includes(event.key)
       if (!horizontal && !vertical) return
       event.preventDefault()
-      const bounds = event.currentTarget.closest('.demo-chat-shell')!.getBoundingClientRect()
+      const b = bounds(event.currentTarget)
       const step = event.shiftKey ? 64 : 24
-      resize(bounds.width + (horizontal ? (event.key === 'ArrowLeft' ? step : -step) : 0),
-        bounds.height + (vertical ? (event.key === 'ArrowUp' ? step : -step) : 0), bounds)
+      resize(b.width + (horizontal ? (event.key === 'ArrowLeft' ? step : -step) : 0),
+        b.height + (vertical ? (event.key === 'ArrowUp' ? step : -step) : 0), b)
     },
   })
   return {
@@ -99,21 +117,23 @@ export function useChatPanelSize() {
     moving,
     toggleMaximized: () => { finish(); setPreferences(previous => ({ ...previous, maximized: !previous.maximized })) },
     style: {
-      ...(preferences.size ? { '--chat-width': `${preferences.size.width}px`, '--chat-height': `${preferences.size.height}px` } : {}),
-      ...(preferences.position ? { '--chat-x': preferences.position.x, '--chat-y': preferences.position.y } : {}),
+      ...(preferences.size ? { '--byok-panel-width': `${preferences.size.width}px`, '--byok-panel-height': `${preferences.size.height}px` } : {}),
+      ...(preferences.position ? { '--byok-panel-x': preferences.position.x, '--byok-panel-y': preferences.position.y } : {}),
     } as CSSProperties,
+    /** Spread on the panel element. */
+    panelProps: { 'data-byok-panel': '' },
     handleProps,
     headerProps: {
       tabIndex: preferences.maximized ? -1 : 0,
       onPointerDown(event: PointerEvent<HTMLElement>) {
         if (preferences.maximized || event.button !== 0 || !event.isPrimary ||
           (event.target as HTMLElement).closest('button, a, input, select, textarea, [role="button"]')) return
-        const bounds = event.currentTarget.closest('.demo-chat-shell')!.getBoundingClientRect()
+        const b = bounds(event.currentTarget)
         event.preventDefault()
         event.currentTarget.focus()
         event.currentTarget.setPointerCapture(event.pointerId)
         move.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY,
-          left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height, original: preferences.position, moved: false }
+          left: b.left, top: b.top, width: b.width, height: b.height, original: preferences.position, moved: false }
       },
       onPointerMove(event: PointerEvent<HTMLElement>) {
         const start = move.current
@@ -138,11 +158,11 @@ export function useChatPanelSize() {
         if (event.key === 'Escape' && move.current) { cancelMove(); event.preventDefault(); event.stopPropagation(); return }
         if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)) return
         event.preventDefault()
-        const bounds = event.currentTarget.closest('.demo-chat-shell')!.getBoundingClientRect()
+        const b = bounds(event.currentTarget)
         const step = event.shiftKey ? 64 : 24
         setPreferences(previous => ({ ...previous, position: positionFor(
-          bounds.left + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0),
-          bounds.top + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0), bounds.width, bounds.height,
+          b.left + (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0),
+          b.top + (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0), b.width, b.height,
         ) }))
       },
     },
