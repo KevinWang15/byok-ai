@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadConnection, loadState, sameConnection, saveConnection, saveState, subscribeConnection, type StoredState } from '../frontend/byok/storage'
+import { loadConnection, loadState, newConversation, sameConnection, saveConnection, saveState, subscribeConnection, type StoredState } from '../frontend/byok/storage'
 
 let items: Map<string, string>
 const windowListeners = new Map<string, Set<(event: { key: string | null }) => void>>()
@@ -86,4 +86,13 @@ test('assistants sharing a connection key hear its changes, from this tab and fr
   assert.equal(sameConnection({ providerId: 'x', values: { apiKey: 'k' } }, { providerId: 'x', values: { apiKey: 'k' } }), true)
   assert.equal(sameConnection({ providerId: 'x', values: { apiKey: 'k' } }, { providerId: 'x', values: { apiKey: 'j' } }), false)
   assert.equal(sameConnection(undefined, undefined), true)
+})
+test('new conversations get ids without crypto.randomUUID, which insecure origins lack', () => {
+  const original = crypto.randomUUID
+  Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: undefined })
+  try {
+    const ids = new Set(Array.from({ length: 100 }, () => newConversation().id))
+    assert.equal(ids.size, 100)
+    for (const id of ids) assert.match(id, /^[0-9a-f]{32}$/)
+  } finally { Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: original }) }
 })

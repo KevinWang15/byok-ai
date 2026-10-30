@@ -15,8 +15,14 @@ export interface StoredState {
   conversations: Conversation[]
   activeConversationId?: string
 }
+// A random id from getRandomValues, which every origin has. crypto.randomUUID exists only in secure
+// contexts (HTTPS or localhost), so a site served over plain HTTP on a LAN address would fail here.
+function randomId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16))
+  return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
+}
 export function newConversation(): Conversation {
-  return { id: crypto.randomUUID(), title: 'New conversation', updatedAt: Date.now(), messages: [], draft: '' }
+  return { id: randomId(), title: 'New conversation', updatedAt: Date.now(), messages: [], draft: '' }
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
