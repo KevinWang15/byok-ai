@@ -5,7 +5,7 @@ import { simulateReadableStream } from 'ai'
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider'
 import type { ChatModelRunOptions, ChatModelRunResult, ThreadMessage } from '@assistant-ui/react'
 import { createApp } from '../backend/app'
-import { createBrowserAdapter, toModelMessages } from '../frontend/byok/agent'
+import { createBrowserAdapter, toModelMessages, INCOMPLETE_MESSAGES } from '../frontend/byok/agent'
 
 const usage = { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } }
 function stream(chunks: LanguageModelV4StreamPart[]) {
@@ -37,6 +37,25 @@ test('browser adapter discovers MCP tools, executes a call, and gives its result
     assert.ok(last.content?.some(p => p.type === 'text' && p.text.includes('current time')))
     assert.deepEqual(errors, [''])
   } finally { await app.close() }
+})
+test('an answer cut off by the output limit, or out of steps, says so; maxOutputTokens reaches the model', async () => {
+  const run = async (finish: 'length' | 'tool-calls', maxSteps: number) => {
+    const chunks: LanguageModelV4StreamPart[] = finish === 'length'
+      ? [{ type: 'text-start', id: 't' }, { type: 'text-delta', id: 't', delta: 'Half an ans' }, { type: 'text-end', id: 't' },
+        { type: 'finish', finishReason: { unified: 'length', raw: undefined }, usage }]
+      : [{ type: 'tool-call', toolCallId: 'c', toolName: 'missing_tool', input: '{}' }, { type: 'finish', finishReason: { unified: 'tool-calls', raw: undefined }, usage }]
+    const model = new MockLanguageModelV4({ doStream: async () => stream(chunks) })
+    const errors: string[] = []
+    const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
+      values: {}, servers: [], systemPrompt: '', maxSteps, maxOutputTokens: 1234, onError: e => errors.push(e) })
+    for await (const _ of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ }
+    return { errors, model }
+  }
+  const cut = await run('length', 3)
+  assert.equal(cut.errors.at(-1), INCOMPLETE_MESSAGES.length)
+  assert.equal(cut.model.doStreamCalls[0].maxOutputTokens, 1234)
+  const steps = await run('tool-calls', 1)
+  assert.equal(steps.errors.at(-1), INCOMPLETE_MESSAGES.steps)
 })
 test('interrupted tool calls always get a matching result in subsequent history', () => {
   const assistant = { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'c', toolName: 'tool', args: {}, argsText: '{}' }] } as unknown as ThreadMessage

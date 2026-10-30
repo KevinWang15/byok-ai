@@ -31,6 +31,8 @@ export interface AskAIOptions {
   storageKey?: string
   title?: string
   maxSteps?: number
+  /** Output token limit per model step; the provider's default when omitted. */
+  maxOutputTokens?: number
 }
 
 export interface AskAIProviderProps extends AskAIOptions { children: ReactNode }

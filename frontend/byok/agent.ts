@@ -25,9 +25,15 @@ export function toModelMessages(messages: readonly ThreadMessage[]): ModelMessag
   return output
 }
 
+/** Shown when a response ended without finishing: cut off by the output limit, or out of steps. */
+export const INCOMPLETE_MESSAGES = {
+  length: 'The answer stopped at the model\'s output limit. Ask it to continue.',
+  steps: 'The assistant used all its steps before finishing. Ask it to continue, or narrow the question.',
+}
+
 export function createBrowserAdapter(options: {
   provider: ProviderPreset; values: ProviderValues; servers: McpServerConfig[]
-  systemPrompt: string; maxSteps: number; onError: (message: string) => void
+  systemPrompt: string; maxSteps: number; maxOutputTokens?: number; onError: (message: string) => void
 }): ChatModelAdapter {
   return {
     async *run({ messages, abortSignal }) {
@@ -60,9 +66,15 @@ export function createBrowserAdapter(options: {
           model: options.provider.createModel(options.values),
           system: options.systemPrompt, messages: toModelMessages(messages), tools,
           stopWhen: stepCountIs(options.maxSteps), abortSignal, maxRetries: 0, onError: () => {},
+          ...(options.maxOutputTokens ? { maxOutputTokens: options.maxOutputTokens } : {}),
         })
         for await (const event of result.fullStream) {
           if (event.type === 'error') throw event.error
+          // The last step's reason: 'length' was cut off; 'tool-calls' means the step limit ended the loop.
+          if (event.type === 'finish') {
+            if (event.finishReason === 'length') options.onError(INCOMPLETE_MESSAGES.length)
+            else if (event.finishReason === 'tool-calls') options.onError(INCOMPLETE_MESSAGES.steps)
+          }
           if (event.type === 'text-delta') {
             const last = content.at(-1)
             if (last?.type === 'text') content[content.length - 1] = { type: 'text', text: last.text + event.text }
