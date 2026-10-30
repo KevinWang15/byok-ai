@@ -60,6 +60,14 @@ export function loadState(key: string): { data: StoredState; error: boolean } {
     }, error: false }
   } catch { return { data: empty, error: true } }
 }
+/** The connection saved under a key: alone, or inside a key's full state. */
+export function loadConnection(key: string): StoredConnection | undefined {
+  return loadState(key).data.connection
+}
+export function saveConnection(key: string, connection: StoredConnection | undefined): boolean {
+  const { data } = loadState(key)
+  return saveState(key, { ...data, connection })
+}
 export function saveState(key: string, state: StoredState): boolean {
   try { localStorage.setItem(key, JSON.stringify(state)); return true } catch { return false }
 }

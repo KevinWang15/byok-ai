@@ -62,6 +62,28 @@ assistant.unmount()
 
 This is an ES-module library for bundlers, not a standalone CDN script. Dependencies are external in the library build. Consumers own all styling and placement. Mount once per storage namespace.
 
+## Page tools and shared connections
+
+MCP servers suit tools the server answers. Tools that act on the page itself, such as editing a draft the user has open, run in the browser: pass them as `clientTools`, AI SDK `tool()` definitions keyed by name. They are offered beside the MCP servers' tools, under the names given (which may not contain `__`, the MCP namespace separator), and their calls and results appear in the chat like any other tool's.
+
+```tsx
+import { tool } from 'ai'
+import { z } from 'zod'
+
+const clientTools = {
+  set_title: tool({
+    description: 'Rename the draft',
+    inputSchema: z.object({ title: z.string() }),
+    execute: async ({ title }) => { draft.rename(title); return { ok: true } },
+  }),
+}
+<AskAIProvider clientTools={clientTools} mcpServers={servers} storageKey="my-app:editor:v1" />
+```
+
+Keep the object stable between renders: read changing state through a ref.
+
+Several assistants on one site, each with its own prompt, tools and conversations, can share one provider connection with `connectionKey`: the connection is saved under that key instead of `storageKey`, and each assistant reads it when it mounts. Mount them one at a time, or remount the others after a connection changes.
+
 ## Headless UI and custom composition
 
 The optional default UI uses `@headlessui/react`:
@@ -94,7 +116,7 @@ function MyControls() {
 </AskAIProvider>
 ```
 
-The hook exposes `connection`, `connect(provider, values)`, `disconnect()`, `providers`, `mcpServers`, `runtime`, `busy`, `error`, `storageError`, `open/setOpen`, `page/setPage`, `conversations`, `activeConversation`, `newConversation()`, `selectConversation(id)`, and `deleteConversation(id)`. Subscribe to messages with assistant-ui's `useAuiState(state => state.thread.messages)`. Sending messages uses `runtime.thread.append(text)`.
+The hook exposes `connection`, `connect(provider, values)`, `disconnect()`, `providers`, `mcpServers`, `clientTools` (names), `runtime`, `busy`, `error`, `storageError`, `open/setOpen`, `page/setPage`, `conversations`, `activeConversation`, `newConversation()`, `selectConversation(id)`, and `deleteConversation(id)`. Subscribe to messages with assistant-ui's `useAuiState(state => state.thread.messages)`. Sending messages uses `runtime.thread.append(text)`.
 
 `connect` validates required preset fields and the preset's custom validator; it returns an error string on failure. Actions that change providers or conversations are blocked during a run. `disconnect` removes the provider/key from memory and localStorage while keeping conversation history and drafts. Changing `storageKey` restores the saved state of that separate namespace.
 

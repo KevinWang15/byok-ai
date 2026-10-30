@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadState, saveState, type StoredState } from '../frontend/byok/storage'
+import { loadConnection, loadState, saveConnection, saveState, type StoredState } from '../frontend/byok/storage'
 
 let items: Map<string, string>
 beforeEach(() => {
@@ -55,4 +55,14 @@ test('denied storage and quota failures are surfaced without throwing', () => {
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('Denied') } })
   assert.equal(loadState('app').error, true)
   assert.equal(saveState('app', { version: 2, conversations: [] }), false)
+})
+test('a shared connection key holds the connection apart from any conversations', () => {
+  const connection = { providerId: 'x', values: { apiKey: 'secret' } }
+  saveState('shared', { version: 2, conversations: [{ id: 'c', title: 'Kept', messages: [], updatedAt: 1 }] })
+  assert.equal(saveConnection('shared', connection), true)
+  assert.deepEqual(loadConnection('shared'), connection)
+  assert.equal(loadState('shared').data.conversations.length, 1, 'conversations kept')
+  saveConnection('shared', undefined)
+  assert.equal(loadConnection('shared'), undefined)
+  assert.ok(!items.get('shared')!.includes('secret'))
 })

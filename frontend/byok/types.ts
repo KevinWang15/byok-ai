@@ -1,5 +1,5 @@
 import type { ComponentType, ReactNode } from 'react'
-import type { LanguageModel } from 'ai'
+import type { LanguageModel, ToolSet } from 'ai'
 import type { TextMessagePartComponent, ToolCallMessagePartComponent } from '@assistant-ui/react'
 
 export type ProviderValues = Record<string, string>
@@ -27,8 +27,18 @@ export interface McpServerConfig {
 export interface AskAIOptions {
   providers?: ProviderPreset[]
   mcpServers?: McpServerConfig[]
+  /**
+   * Tools that run in the page, beside the MCP servers' (AI SDK `tool()` definitions).
+   * Names are used as given and may not contain "__". Keep the object stable between renders.
+   */
+  clientTools?: ToolSet
   systemPrompt?: string
   storageKey?: string
+  /**
+   * Where the provider connection is saved; `storageKey` when omitted. Assistants with the
+   * same key share one connection; each reads it when it mounts.
+   */
+  connectionKey?: string
   title?: string
   maxSteps?: number
   /** Output token limit per model step; the provider's default when omitted. */

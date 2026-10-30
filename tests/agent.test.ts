@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { MockLanguageModelV4 } from 'ai/test'
-import { simulateReadableStream } from 'ai'
+import { simulateReadableStream, tool } from 'ai'
+import { z } from 'zod'
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider'
 import type { ChatModelRunOptions, ChatModelRunResult, ThreadMessage } from '@assistant-ui/react'
 import { createApp } from '../backend/app'
@@ -116,6 +117,28 @@ test('after the tool budget, and on the last step, the model answers without too
   assert.equal((await run(10, 2))[1].toolChoice, 'none')
   // Without a budget only the last step is held to answering.
   assert.deepEqual((await run(3)).map(call => call.final), [false, false, true])
+})
+test('client tools run in the page beside MCP tools; names with "__" are refused', async () => {
+  const model = new MockLanguageModelV4({ doStream: [
+    stream([{ type: 'tool-call', toolCallId: 'c', toolName: 'set_title', input: '{"title":"Spend"}' },
+      { type: 'finish', finishReason: { unified: 'tool-calls', raw: undefined }, usage }]),
+    stream([{ type: 'text-start', id: 't' }, { type: 'text-delta', id: 't', delta: 'Renamed.' }, { type: 'text-end', id: 't' },
+      { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }]),
+  ] })
+  const titles: string[] = []
+  const clientTools = { set_title: tool({ description: 'Rename the draft', inputSchema: z.object({ title: z.string() }),
+    execute: async ({ title }) => { titles.push(title); return { ok: true } } }) }
+  const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
+    values: {}, servers: [], clientTools, systemPrompt: '', maxSteps: 3, onError: () => {} })
+  let last: ChatModelRunResult = {}
+  for await (const part of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) last = part
+  assert.deepEqual(titles, ['Spend'])
+  assert.deepEqual(model.doStreamCalls[0].tools?.map(t => t.name), ['set_title'])
+  assert.ok(last.content?.some(p => p.type === 'tool-call' && p.toolName === 'set_title' && p.result !== undefined))
+  const errors: string[] = []
+  const bad = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
+    values: {}, servers: [], clientTools: { a__b: clientTools.set_title }, systemPrompt: '', maxSteps: 1, onError: e => errors.push(e) })
+  await assert.rejects(async () => { for await (const _ of bad.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ } })
 })
 test('interrupted tool calls always get a matching result in subsequent history', () => {
   const assistant = { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'c', toolName: 'tool', args: {}, argsText: '{}' }] } as unknown as ThreadMessage

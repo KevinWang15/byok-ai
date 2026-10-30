@@ -106,10 +106,12 @@ export function AskAISetup() {
 export { AskAIHistory }
 
 export function AskAITools() {
-  const { mcpServers } = useAskAI()
+  const { mcpServers, clientTools } = useAskAI()
   return <section data-byok="tools"><h2>MCP servers</h2>
     <ul>{mcpServers.map(server => <li key={server.id}>{server.name} <code>{server.url}</code></li>)}</ul>
     {!mcpServers.length && <p>No MCP servers configured.</p>}
+    {clientTools.length > 0 && <><h2>Page tools</h2>
+      <ul>{clientTools.map(name => <li key={name}><code>{name}</code></li>)}</ul></>}
   </section>
 }
 

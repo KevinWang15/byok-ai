@@ -47,7 +47,7 @@ function lastToolCall(content: ThreadAssistantMessagePart[]) {
 }
 
 export function createBrowserAdapter(options: {
-  provider: ProviderPreset; values: ProviderValues; servers: McpServerConfig[]
+  provider: ProviderPreset; values: ProviderValues; servers: McpServerConfig[]; clientTools?: ToolSet
   systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number; onError: (message: string) => void
 }): ChatModelAdapter {
   return {
@@ -60,6 +60,11 @@ export function createBrowserAdapter(options: {
       try {
         abortSignal.throwIfAborted()
         const tools: ToolSet = {}
+        // Client tool names cannot contain '__', so they never collide with MCP tools.
+        for (const [name, tool] of Object.entries(options.clientTools ?? {})) {
+          if (!/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('__')) throw new Error('Client tool names must contain only letters, numbers, underscores or hyphens, and no "__".')
+          tools[name] = tool
+        }
         for (const server of options.servers) {
           abortSignal.throwIfAborted()
           if (!/^[a-zA-Z0-9_-]+$/.test(server.id)) throw new Error('MCP IDs must contain only letters, numbers, underscores or hyphens.')

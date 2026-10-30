@@ -9,6 +9,8 @@ export interface AskAIContextValue {
   title: string
   providers: ProviderPreset[]
   mcpServers: NonNullable<AskAIOptions['mcpServers']>
+  /** Names of the tools that run in the page. */
+  clientTools: string[]
   open: boolean
   setOpen: (open: boolean) => void
   page: AskAIPage
