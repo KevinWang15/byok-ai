@@ -97,6 +97,39 @@ test('assistant answers can be copied and regenerated, and the regenerated answe
   await expect(page.getByText('Question', { exact: true })).toHaveCount(1)
   expect(errors).toEqual([])
 })
+test('hovering an earlier answer shows its actions without moving anything', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (localStorage.getItem('byok-ai:conversations:v1')) return
+    const at = new Date().toISOString()
+    const text = (id: string, role: string, value: string) => ({ id, role, createdAt: at, content: [{ type: 'text', text: value }], attachments: [], metadata: { custom: {} }, ...(role === 'assistant' ? { status: { type: 'complete', reason: 'stop' } } : {}) })
+    const messages = [text('u1', 'user', 'First question'), text('a1', 'assistant', 'First answer. '.repeat(30)), text('u2', 'user', 'Second question'), text('a2', 'assistant', 'Second answer.')]
+    localStorage.setItem('byok-ai:conversations:v1', JSON.stringify({ version: 2, activeConversationId: 'c', conversations: [{ id: 'c', title: 'First question', updatedAt: Date.now(), messages }],
+      connection: { providerId: 'compatible', values: { apiKey: 'test', model: 'test', baseURL: 'https://model.example/v1' } } }))
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open Ask AI' }).click()
+  const earlier = page.locator('[data-byok="message"][data-role="assistant"]').first()
+  const actions = earlier.locator('[data-byok="message-actions"]')
+  const list = page.locator('[data-byok="messages"]')
+  await expect(actions).toBeHidden()
+  // Where the message sits in the scrolled content, and its size: hovering may scroll the list.
+  const place = () => earlier.evaluate(el => {
+    const list = el.closest('[data-byok="messages"]')!
+    const box = el.getBoundingClientRect()
+    return { top: box.top - list.getBoundingClientRect().top + list.scrollTop, width: box.width, height: box.height }
+  })
+  const before = { message: await place(), width: await list.evaluate(el => el.clientWidth), height: await list.evaluate(el => el.scrollHeight) }
+  await earlier.hover()
+  await expect(actions).toBeVisible()
+  expect(await place()).toEqual(before.message)
+  expect(await list.evaluate(el => el.clientWidth)).toBe(before.width)
+  expect(await list.evaluate(el => el.scrollHeight)).toBe(before.height)
+  await page.mouse.move(2, 2)
+  await expect(actions).toBeHidden()
+  expect(await place()).toEqual(before.message)
+  // The last answer's actions stay visible, as before.
+  await expect(page.locator('[data-byok="message"][data-role="assistant"]').last().locator('[data-byok="message-actions"]')).toBeVisible()
+})
 test('widget fits a mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')

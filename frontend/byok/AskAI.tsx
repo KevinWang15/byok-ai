@@ -26,12 +26,16 @@ export function AskAIMessageContent() {
  * Unstyled actions for the enclosing assistant message: copy its text and regenerate it.
  * Hidden while a response runs; on earlier messages only while hovered or focused.
  * Regenerate is disabled without a provider. `copy`, `copied` and `regenerate` replace the labels.
+ * Hidden actions keep their place (`visibility: hidden`, `data-hidden`), so hovering a message
+ * never changes the conversation's height or shows and hides its scrollbar.
  */
-export function AskAIMessageActions({ copy = 'Copy response', copied = 'Copied', regenerate = 'Regenerate response', ...props }:
+export function AskAIMessageActions({ copy = 'Copy response', copied = 'Copied', regenerate = 'Regenerate response', style, ...props }:
   Omit<ComponentPropsWithoutRef<typeof ActionBarPrimitive.Root>, 'children'> & { copy?: ReactNode; copied?: ReactNode; regenerate?: ReactNode }) {
   const { connection } = useAskAI()
   const isCopied = useAuiState(state => state.message.isCopied)
-  return <ActionBarPrimitive.Root data-byok="message-actions" hideWhenRunning autohide="not-last" {...props}>
+  const hidden = useAuiState(state => state.thread.isRunning || (!state.message.isLast && !state.message.isHovering))
+  return <ActionBarPrimitive.Root data-byok="message-actions" data-hidden={hidden || undefined} {...props}
+    style={hidden ? { ...style, visibility: 'hidden' } : style}>
     <ActionBarPrimitive.Copy data-byok="message-copy">{isCopied ? copied : copy}</ActionBarPrimitive.Copy>
     <ActionBarPrimitive.Reload data-byok="message-regenerate" disabled={!connection}>{regenerate}</ActionBarPrimitive.Reload>
   </ActionBarPrimitive.Root>
