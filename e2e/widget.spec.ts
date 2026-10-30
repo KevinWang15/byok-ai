@@ -143,6 +143,26 @@ test('custom UI uses the headless provider without a wrapper or default widget',
   await expect(custom.getByLabel('OpenAI API key')).toHaveValue('')
 })
 
+test('assistants sharing a connection key connect and disconnect together, in this tab and others', async ({ page, context }) => {
+  await page.goto('/')
+  const shared = page.getByRole('region', { name: 'Shared connection example' })
+  const first = shared.getByRole('article', { name: 'First assistant' })
+  const second = shared.getByRole('article', { name: 'Second assistant' })
+  await first.getByLabel('Shared OpenAI key').fill('shared-test-key')
+  await first.getByRole('button', { name: 'Connect' }).click()
+  await expect(second.getByText(/Connected to OpenAI/)).toBeVisible()
+  const other = await context.newPage()
+  await other.goto('/')
+  const otherSecond = other.getByRole('region', { name: 'Shared connection example' }).getByRole('article', { name: 'Second assistant' })
+  await expect(otherSecond.getByText(/Connected to OpenAI/)).toBeVisible()
+  await otherSecond.getByRole('button', { name: 'Disconnect' }).click()
+  await expect(first.getByLabel('Shared OpenAI key')).toBeVisible()
+  await expect(second.getByLabel('Shared OpenAI key')).toBeVisible()
+  // Each keeps its own conversations; only the connection key holds the key.
+  const stored = await page.evaluate(() => ({ ...localStorage }))
+  expect(JSON.stringify(stored)).not.toContain('shared-test-key')
+})
+
 test('disconnecting from provider settings clears the setup fields', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Open Ask AI' }).click()

@@ -70,19 +70,24 @@ MCP servers suit tools the server answers. Tools that act on the page itself, su
 import { tool } from 'ai'
 import { z } from 'zod'
 
-const clientTools = {
-  set_title: tool({
-    description: 'Rename the draft',
-    inputSchema: z.object({ title: z.string() }),
-    execute: async ({ title }) => { draft.rename(title); return { ok: true } },
-  }),
+function Editor() {
+  const [draft, setDraft] = useState(initialDraft)
+  // New definitions every render are fine: each call runs the latest one, with the latest draft.
+  const clientTools = {
+    get_draft: tool({ description: 'The open draft', inputSchema: z.object({}), execute: async () => draft }),
+    set_title: tool({
+      description: 'Rename the draft',
+      inputSchema: z.object({ title: z.string() }),
+      execute: async ({ title }) => { setDraft(d => ({ ...d, title })); return { ok: true } },
+    }),
+  }
+  return <AskAIProvider clientTools={clientTools} mcpServers={servers} storageKey="my-app:editor:v1">…</AskAIProvider>
 }
-<AskAIProvider clientTools={clientTools} mcpServers={servers} storageKey="my-app:editor:v1" />
 ```
 
-Keep the object stable between renders: read changing state through a ref.
+The runtime restarts only when the set of tool names changes; a call made after the page's state changed, even within one answer, runs the definition from the latest render.
 
-Several assistants on one site, each with its own prompt, tools and conversations, can share one provider connection with `connectionKey`: the connection is saved under that key instead of `storageKey`, and each assistant reads it when it mounts. Mount them one at a time, or remount the others after a connection changes.
+Several assistants on one site, each with its own prompt, tools and conversations, can share one provider connection with `connectionKey`: the connection is saved under that key instead of `storageKey`, and connecting or disconnecting in one updates every other mounted assistant with the same key, in the same tab and in other tabs. A running answer finishes with the connection it started with.
 
 ## Headless UI and custom composition
 

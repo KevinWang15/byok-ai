@@ -29,14 +29,16 @@ export interface AskAIOptions {
   mcpServers?: McpServerConfig[]
   /**
    * Tools that run in the page, beside the MCP servers' (AI SDK `tool()` definitions).
-   * Names are used as given and may not contain "__". Keep the object stable between renders.
+   * Names are used as given and may not contain "__". Pass new definitions as the page's state
+   * changes: every call runs the latest one. Adding or removing a name restarts the runtime.
    */
   clientTools?: ToolSet
   systemPrompt?: string
   storageKey?: string
   /**
    * Where the provider connection is saved; `storageKey` when omitted. Assistants with the
-   * same key share one connection; each reads it when it mounts.
+   * same key share one connection: connecting or disconnecting in one updates the others, in
+   * this tab and in other tabs. Each keeps its own conversations under its `storageKey`.
    */
   connectionKey?: string
   title?: string

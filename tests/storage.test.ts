@@ -1,8 +1,13 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadConnection, loadState, saveConnection, saveState, type StoredState } from '../frontend/byok/storage'
+import { loadConnection, loadState, sameConnection, saveConnection, saveState, subscribeConnection, type StoredState } from '../frontend/byok/storage'
 
 let items: Map<string, string>
+const windowListeners = new Map<string, Set<(event: { key: string | null }) => void>>()
+Object.defineProperty(globalThis, 'window', { configurable: true, value: {
+  addEventListener: (type: string, listener: (event: { key: string | null }) => void) => windowListeners.set(type, (windowListeners.get(type) ?? new Set()).add(listener)),
+  removeEventListener: (type: string, listener: (event: { key: string | null }) => void) => windowListeners.get(type)?.delete(listener),
+} })
 beforeEach(() => {
   items = new Map()
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
@@ -65,4 +70,20 @@ test('a shared connection key holds the connection apart from any conversations'
   saveConnection('shared', undefined)
   assert.equal(loadConnection('shared'), undefined)
   assert.ok(!items.get('shared')!.includes('secret'))
+})
+test('assistants sharing a connection key hear its changes, from this tab and from others', () => {
+  let heard = 0
+  const stop = subscribeConnection('shared', () => heard++)
+  saveConnection('shared', { providerId: 'x', values: { apiKey: 'k' } })
+  assert.equal(heard, 1)
+  for (const listener of windowListeners.get('storage') ?? []) listener({ key: 'shared' })
+  for (const listener of windowListeners.get('storage') ?? []) listener({ key: 'other' })
+  assert.equal(heard, 2, 'another tab wrote this key; other keys are ignored')
+  stop()
+  saveConnection('shared', undefined)
+  assert.equal(heard, 2, 'unsubscribed')
+  assert.equal(windowListeners.get('storage')?.size, 0)
+  assert.equal(sameConnection({ providerId: 'x', values: { apiKey: 'k' } }, { providerId: 'x', values: { apiKey: 'k' } }), true)
+  assert.equal(sameConnection({ providerId: 'x', values: { apiKey: 'k' } }, { providerId: 'x', values: { apiKey: 'j' } }), false)
+  assert.equal(sameConnection(undefined, undefined), true)
 })

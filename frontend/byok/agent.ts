@@ -47,7 +47,9 @@ function lastToolCall(content: ThreadAssistantMessagePart[]) {
 }
 
 export function createBrowserAdapter(options: {
-  provider: ProviderPreset; values: ProviderValues; servers: McpServerConfig[]; clientTools?: ToolSet
+  provider: ProviderPreset; values: ProviderValues; servers: McpServerConfig[]
+  // The page's tools, read when a run starts and again by each call, so a call runs the latest definition.
+  clientTools?: () => ToolSet
   systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number; onError: (message: string) => void
 }): ChatModelAdapter {
   return {
@@ -61,9 +63,13 @@ export function createBrowserAdapter(options: {
         abortSignal.throwIfAborted()
         const tools: ToolSet = {}
         // Client tool names cannot contain '__', so they never collide with MCP tools.
-        for (const [name, tool] of Object.entries(options.clientTools ?? {})) {
+        for (const [name, tool] of Object.entries(options.clientTools?.() ?? {})) {
           if (!/^[a-zA-Z0-9_-]+$/.test(name) || name.includes('__')) throw new Error('Client tool names must contain only letters, numbers, underscores or hyphens, and no "__".')
-          tools[name] = tool
+          tools[name] = { ...tool, execute: async (input: unknown, callOptions: never) => {
+            const current = options.clientTools?.()[name]?.execute
+            if (!current) throw new Error(`The page no longer offers ${name}.`)
+            return current(input as never, callOptions)
+          } } as typeof tool
         }
         for (const server of options.servers) {
           abortSignal.throwIfAborted()

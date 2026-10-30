@@ -60,6 +60,8 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 .demo-code pre { margin: 0; padding: 23px 20px; overflow: auto; font-size: 10px; line-height: 1.9; color: #8a729c; tab-size: 2; }
 .demo-code-foot { font-size: 8px; color: #b5aabd; padding: 12px 18px; border-top: 1px solid #eeeaf2; }
 .demo-sandbox { margin: 0 0 45px; padding: 26px 30px; border: 1px solid #e9e2f0; border-radius: 16px; background: #fff9; }
+.demo-shared { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-top: 12px; }
+.demo-shared article h3 { margin: 0 0 4px; font-size: 14px; font-weight: 600; }
 .demo-sandbox h2 { font-weight: 500; font-size: 21px; letter-spacing: -.5px; margin: 12px 0 8px; }
 .demo-sandbox p { font-size: 12px; color: #a092ab; line-height: 1.7; }
 .demo-sandbox form { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 18px; }

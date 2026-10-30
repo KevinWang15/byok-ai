@@ -66,7 +66,35 @@ export function loadConnection(key: string): StoredConnection | undefined {
 }
 export function saveConnection(key: string, connection: StoredConnection | undefined): boolean {
   const { data } = loadState(key)
-  return saveState(key, { ...data, connection })
+  const saved = saveState(key, { ...data, connection })
+  notifyConnection(key)
+  return saved
+}
+
+// Assistants that share a connection key follow each other's connect and disconnect: in this tab
+// through these listeners, in other tabs through the storage event.
+const connectionListeners = new Map<string, Set<() => void>>()
+export function notifyConnection(key: string): void {
+  for (const listener of connectionListeners.get(key) ?? []) listener()
+}
+/** Calls `listener` after the connection under `key` may have changed. Returns the unsubscribe. */
+export function subscribeConnection(key: string, listener: () => void): () => void {
+  const listeners = connectionListeners.get(key) ?? new Set()
+  listeners.add(listener)
+  connectionListeners.set(key, listeners)
+  const onStorage = (event: StorageEvent) => { if (event.key === key || event.key === null) listener() }
+  window.addEventListener('storage', onStorage)
+  return () => {
+    listeners.delete(listener)
+    if (!listeners.size) connectionListeners.delete(key)
+    window.removeEventListener('storage', onStorage)
+  }
+}
+/** Whether two saved connections are the same provider with the same values. */
+export function sameConnection(a: StoredConnection | undefined, b: StoredConnection | undefined): boolean {
+  if (!a || !b) return a === b
+  const keys = Object.keys(a.values)
+  return a.providerId === b.providerId && keys.length === Object.keys(b.values).length && keys.every(key => a.values[key] === b.values[key])
 }
 export function saveState(key: string, state: StoredState): boolean {
   try { localStorage.setItem(key, JSON.stringify(state)); return true } catch { return false }

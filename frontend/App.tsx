@@ -38,6 +38,32 @@ function HeadlessExample() {
     </>}
   </section>
 }
+// Two assistants, each with its own conversations, sharing one connection: connect in either and
+// both are connected.
+function SharedConnectionStatus({ name }: { name: string }) {
+  const { connection, providers, connect, disconnect } = useAskAI()
+  const [key, setKey] = useState('')
+  return <article aria-label={name}>
+    <h3>{name}</h3>
+    {connection ? <>
+      <p>Connected to {connection.provider.name}.</p>
+      <button type="button" onClick={disconnect}>Disconnect</button>
+    </> : <form onSubmit={e => { e.preventDefault(); if (!connect(providers[0], { ...providers[0].defaultValues, apiKey: key })) setKey('') }}>
+      <label>Shared OpenAI key <input type="password" value={key} onChange={e => setKey(e.target.value)} required /></label>
+      <button>Connect</button>
+    </form>}
+  </article>
+}
+function SharedConnectionExample() {
+  return <section className="demo-sandbox" aria-label="Shared connection example">
+    <span className="demo-eyebrow">SHARED CONNECTION</span><h2>One key for every assistant.</h2>
+    <p>These two assistants keep separate conversations under their own <code>storageKey</code> and share one provider connection through <code>connectionKey</code>. Connect or disconnect in either one.</p>
+    <div className="demo-shared">
+      <AskAIProvider storageKey="byok-ai:shared-demo:first:v1" connectionKey="byok-ai:shared-demo:connection:v1"><SharedConnectionStatus name="First assistant" /></AskAIProvider>
+      <AskAIProvider storageKey="byok-ai:shared-demo:second:v1" connectionKey="byok-ai:shared-demo:connection:v1"><SharedConnectionStatus name="Second assistant" /></AskAIProvider>
+    </div>
+  </section>
+}
 function CustomMarkdownText() {
   return <MarkdownText components={{
     h2: ({ children }) => <h2 data-demo-heading="custom">{children}</h2>,
@@ -102,6 +128,7 @@ import { DemoAssistant } from './demo/DemoAssistant'
         <div className="demo-code"><div className="demo-code-header"><span><span className="demo-code-dot" /> YourPage.tsx</span><button onClick={async () => { try { await navigator.clipboard.writeText(snippet); setCopied(true); setCopyError(false) } catch { setCopyError(true) } }}>{copied ? 'Copied ✓' : 'Copy code'}</button></div><pre><code>{snippet}</code></pre>{copyError && <p role="status">Select the code above to copy it.</p>}<div className="demo-code-foot">React · assistant-ui · Vercel AI SDK · Headless UI</div></div>
       </section>
       <AskAIProvider mcpServers={servers} storageKey="byok-ai:headless-demo:v1"><HeadlessExample /></AskAIProvider>
+      <SharedConnectionExample />
     </main>
     <footer className="demo-footer"><a className="demo-logo" href="#"><DemoIcon name="sparkle" size={16} /> byok / ai</a><span>React component library</span><span>Browser-side agent · MCP backend</span></footer>
     <DemoAssistant />

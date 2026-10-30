@@ -126,18 +126,22 @@ test('client tools run in the page beside MCP tools; names with "__" are refused
       { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }]),
   ] })
   const titles: string[] = []
-  const clientTools = { set_title: tool({ description: 'Rename the draft', inputSchema: z.object({ title: z.string() }),
-    execute: async ({ title }) => { titles.push(title); return { ok: true } } }) }
+  const define = (version: string) => ({ set_title: tool({ description: 'Rename the draft', inputSchema: z.object({ title: z.string() }),
+    execute: async ({ title }) => { titles.push(`${version}:${title}`); return { ok: true } } }) })
+  // The page's state changes after the run starts: the call runs the latest definition.
+  let clientTools = define('first')
   const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
-    values: {}, servers: [], clientTools, systemPrompt: '', maxSteps: 3, onError: () => {} })
+    values: {}, servers: [], clientTools: () => clientTools, systemPrompt: '', maxSteps: 3, onError: () => {} })
   let last: ChatModelRunResult = {}
-  for await (const part of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) last = part
-  assert.deepEqual(titles, ['Spend'])
+  const run = adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>
+  clientTools = define('latest')
+  for await (const part of run) last = part
+  assert.deepEqual(titles, ['latest:Spend'])
   assert.deepEqual(model.doStreamCalls[0].tools?.map(t => t.name), ['set_title'])
   assert.ok(last.content?.some(p => p.type === 'tool-call' && p.toolName === 'set_title' && p.result !== undefined))
   const errors: string[] = []
   const bad = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
-    values: {}, servers: [], clientTools: { a__b: clientTools.set_title }, systemPrompt: '', maxSteps: 1, onError: e => errors.push(e) })
+    values: {}, servers: [], clientTools: () => ({ a__b: clientTools.set_title }), systemPrompt: '', maxSteps: 1, onError: e => errors.push(e) })
   await assert.rejects(async () => { for await (const _ of bad.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ } })
 })
 test('interrupted tool calls always get a matching result in subsequent history', () => {
