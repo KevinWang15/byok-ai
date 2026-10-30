@@ -129,6 +129,12 @@ export function DemoAssistant() {
         <Button type="button" className="chat-resize-handle chat-resize-corner" aria-label="Resize chat" title="Drag to resize" aria-describedby={id + '-resize-help'} {...panelSize.handleProps('both')}>
           <Icon name="resize" size={13} />
         </Button>
+        {/* The other edges and corners, as with an OS window. */}
+        <Button type="button" className="chat-resize-handle chat-resize-e" aria-label="Resize chat from the right" aria-describedby={id + '-resize-help'} {...panelSize.handleProps('e')} />
+        <Button type="button" className="chat-resize-handle chat-resize-s" aria-label="Resize chat from the bottom" aria-describedby={id + '-resize-help'} {...panelSize.handleProps('s')} />
+        <Button type="button" className="chat-resize-handle chat-resize-ne" aria-label="Resize chat from the top right" aria-describedby={id + '-resize-help'} {...panelSize.handleProps('ne')} />
+        <Button type="button" className="chat-resize-handle chat-resize-sw" aria-label="Resize chat from the bottom left" aria-describedby={id + '-resize-help'} {...panelSize.handleProps('sw')} />
+        <Button type="button" className="chat-resize-handle chat-resize-se" aria-label="Resize chat from the bottom right" aria-describedby={id + '-resize-help'} {...panelSize.handleProps('se')} />
       </>}
     </AskAIPanel>
     <span id={id + '-move-help'} className="demo-sr-only">Drag to move, or use arrow keys while focused. Hold Shift for larger steps. Click or press Enter to open chat.</span>

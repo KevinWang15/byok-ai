@@ -3,7 +3,15 @@ import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, ty
 type Size = { width: number; height: number }
 type Position = { x: number; y: number }
 type Preferences = { size?: Size; position?: Position; maximized: boolean }
-type Direction = 'width' | 'height' | 'both'
+/**
+ * The edge or corner a handle resizes, by compass point: `n` top, `s` bottom, `e` right, `w` left.
+ * The dragged edges follow the pointer; the opposite ones stay put, as with an OS window.
+ * `width`, `height` and `both` are the left edge, the top edge and the top-left corner.
+ */
+export type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
+type Direction = ResizeEdge | 'width' | 'height' | 'both'
+const EDGES: Record<Direction, ResizeEdge> = { n: 'n', s: 's', e: 'e', w: 'w', ne: 'ne', nw: 'nw', se: 'se', sw: 'sw', width: 'w', height: 'n', both: 'nw' }
+type Rect = { left: number; top: number; right: number; bottom: number }
 export interface PanelLayoutOptions {
   /** localStorage key for the size, position and maximized state. */
   storageKey: string
@@ -29,8 +37,8 @@ function loadPreferences(key: string): Preferences {
 }
 
 /**
- * Headless geometry for a floating panel: move by dragging a header, resize from the
- * top and left edges, and maximize. Mouse, touch and arrow keys (Shift for larger
+ * Headless geometry for a floating panel: move by dragging a header, resize from any
+ * edge or corner, and maximize. Mouse, touch and arrow keys (Shift for larger
  * steps); Escape cancels a move. Saved to localStorage. Spread `panelProps` on the
  * panel (it marks it with `data-byok-panel`, which the header and handles inside it
  * measure), `headerProps` and `handleProps(direction)`, and apply `style`:
@@ -41,7 +49,7 @@ export function usePanelLayout({ storageKey, margin = defaultMargin, minSize = 3
   const [preferences, setPreferences] = useState(() => loadPreferences(storageKey))
   const [resizing, setResizing] = useState(false)
   const [moving, setMoving] = useState(false)
-  const drag = useRef<{ x: number; y: number; width: number; height: number; right: number; bottom: number; direction: Direction } | null>(null)
+  const drag = useRef<{ x: number; y: number; rect: Rect; edge: ResizeEdge } | null>(null)
   const move = useRef<{ pointerId: number; x: number; y: number; left: number; top: number; width: number; height: number; original?: Position; moved: boolean } | null>(null)
   useEffect(() => {
     if (resizing || moving) return
@@ -57,16 +65,21 @@ export function usePanelLayout({ storageKey, margin = defaultMargin, minSize = 3
       y: clamp((top - m) / Math.max(1, window.innerHeight - height - m * 2)),
     }
   }
-  const resize = (width: number, height: number, edge: { right: number; bottom: number }) => {
+  // The panel from `start` with the edges of `edge` moved by dx and dy, kept at least minSize and
+  // within the margins. The opposite edges don't move. A panel still in its default corner stays
+  // there while its own corner's edges don't move; once they do, it is placed where it now is.
+  const resize = (start: Rect, edge: ResizeEdge, dx: number, dy: number) => {
     const m = margin()
-    const maxWidth = Math.max(1, edge.right - m)
-    const maxHeight = Math.max(1, edge.bottom - m)
-    const size = {
-      width: Math.min(maxWidth, Math.max(Math.min(minSize, maxWidth), width)),
-      height: Math.min(maxHeight, Math.max(Math.min(minSize, maxHeight), height)),
-    }
-    setPreferences(previous => ({ ...previous, size,
-      position: previous.position ? positionFor(edge.right - size.width, edge.bottom - size.height, size.width, size.height) : undefined,
+    let { left, top, right, bottom } = start
+    const size = (low: number, high: number) => Math.min(minSize, high - low)
+    if (edge.includes('w')) left = Math.min(Math.max(m, start.left + dx), right - size(m, right))
+    if (edge.includes('e')) right = Math.max(Math.min(window.innerWidth - m, start.right + dx), left + size(left, window.innerWidth - m))
+    if (edge.includes('n')) top = Math.min(Math.max(m, start.top + dy), bottom - size(m, bottom))
+    if (edge.includes('s')) bottom = Math.max(Math.min(window.innerHeight - m, start.bottom + dy), top + size(top, window.innerHeight - m))
+    const next = { width: right - left, height: bottom - top }
+    const anchorMoved = (edge.includes('e') && right !== start.right) || (edge.includes('s') && bottom !== start.bottom)
+    setPreferences(previous => ({ ...previous, size: next,
+      position: previous.position || anchorMoved ? positionFor(left, top, next.width, next.height) : undefined,
     }))
   }
   const finish = () => { drag.current = null; setResizing(false) }
@@ -77,21 +90,23 @@ export function usePanelLayout({ storageKey, margin = defaultMargin, minSize = 3
     move.current = null
     setMoving(false)
   }
-  const handleProps = (direction: Direction) => ({
+  const rectOf = (from: Element): Rect => { const b = bounds(from); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom } }
+  const handleProps = (direction: Direction) => {
+    const edge = EDGES[direction]
+    return {
+    'data-byok-resize': edge,
     onPointerDown(event: PointerEvent<HTMLElement>) {
       if (event.button !== 0 || !event.isPrimary) return
-      const b = bounds(event.currentTarget)
       event.preventDefault()
       event.currentTarget.focus()
       event.currentTarget.setPointerCapture(event.pointerId)
-      drag.current = { x: event.clientX, y: event.clientY, width: b.width, height: b.height, right: b.right, bottom: b.bottom, direction }
+      drag.current = { x: event.clientX, y: event.clientY, rect: rectOf(event.currentTarget), edge }
       setResizing(true)
     },
     onPointerMove(event: PointerEvent<HTMLElement>) {
       const start = drag.current
       if (!start || !event.currentTarget.hasPointerCapture(event.pointerId)) return
-      resize(start.width + (start.direction === 'height' ? 0 : start.x - event.clientX),
-        start.height + (start.direction === 'width' ? 0 : start.y - event.clientY), start)
+      resize(start.rect, start.edge, event.clientX - start.x, event.clientY - start.y)
     },
     onPointerUp(event: PointerEvent<HTMLElement>) {
       if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId)
@@ -99,17 +114,18 @@ export function usePanelLayout({ storageKey, margin = defaultMargin, minSize = 3
     },
     onPointerCancel: finish,
     onLostPointerCapture: finish,
+    // Arrow keys move the handle's edges the same way the pointer would.
     onKeyDown(event: KeyboardEvent<HTMLElement>) {
-      const horizontal = direction !== 'height' && ['ArrowLeft', 'ArrowRight'].includes(event.key)
-      const vertical = direction !== 'width' && ['ArrowUp', 'ArrowDown'].includes(event.key)
+      const horizontal = /[ew]/.test(edge) && ['ArrowLeft', 'ArrowRight'].includes(event.key)
+      const vertical = /[ns]/.test(edge) && ['ArrowUp', 'ArrowDown'].includes(event.key)
       if (!horizontal && !vertical) return
       event.preventDefault()
-      const b = bounds(event.currentTarget)
       const step = event.shiftKey ? 64 : 24
-      resize(b.width + (horizontal ? (event.key === 'ArrowLeft' ? step : -step) : 0),
-        b.height + (vertical ? (event.key === 'ArrowUp' ? step : -step) : 0), b)
+      resize(rectOf(event.currentTarget), edge,
+        horizontal ? (event.key === 'ArrowLeft' ? -step : step) : 0, vertical ? (event.key === 'ArrowUp' ? -step : step) : 0)
     },
-  })
+  }
+  }
   return {
     maximized: preferences.maximized,
     positioned: Boolean(preferences.position),

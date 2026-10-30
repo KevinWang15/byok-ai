@@ -263,6 +263,11 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 .chat-resize-height { top: 0; left: 24px; right: 24px; height: 7px; cursor: ns-resize; }
 .chat-resize-corner { top: 3px; left: 3px; width: 23px; height: 23px; border-radius: 14px 0 6px; cursor: nwse-resize; color: #b6a4c5!important; }
 .chat-resize-corner svg { width: 13px; height: 13px; opacity: .65; }
+.chat-resize-e { top: 24px; bottom: 24px; right: 0; width: 7px; cursor: ew-resize; }
+.chat-resize-s { bottom: 0; left: 24px; right: 24px; height: 7px; cursor: ns-resize; }
+.chat-resize-ne { top: 0; right: 0; width: 16px; height: 16px; cursor: nesw-resize; }
+.chat-resize-sw { bottom: 0; left: 0; width: 16px; height: 16px; cursor: nesw-resize; }
+.chat-resize-se { bottom: 0; right: 0; width: 16px; height: 16px; cursor: nwse-resize; }
 .chat-resize-handle:hover, .chat-resize-handle:focus-visible { background: #e7ddf080; }
 .chat-resize-handle:focus-visible { outline-offset: -2px; }
 /* A moved panel owns its viewport position; its portal must not block the page outside it. */

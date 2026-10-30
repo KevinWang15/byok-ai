@@ -4,7 +4,7 @@ import { AskAIContext, type AskAIContextValue, type AskAIPage, type ProviderConn
 import { defaultProviders } from './providers'
 import { createBrowserAdapter } from './agent'
 import {
-  defaultConnectionKey, loadConnection, loadState, migrateConnection, newConversation, sameConnection, saveConnection, saveState, subscribeConnection,
+  defaultConnectionKey, isEmptyConversation, loadConnection, loadState, migrateConnection, newConversation, sameConnection, saveConnection, saveState, subscribeConnection,
   type Conversation, type StoredConnection, type StoredState,
 } from './storage'
 import type { ToolSet } from 'ai'
@@ -114,8 +114,11 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
     const saved = loadConnection(connectionKey)
     setConnection(current => sameConnection(current && { providerId: current.provider.id, values: current.values }, saved) ? current : connectionOf(providers, saved))
   }), [connectionKey, providers])
+  // An empty conversation (a new one, or one whose only draft was cleared) is current but not
+  // listed: history holds only conversations with something in them.
   const save = useCallback((conversation: Conversation) => {
-    const next = [conversation, ...storeRef.current.conversations.filter(c => c.id !== conversation.id)]
+    const others = storeRef.current.conversations.filter(c => c.id !== conversation.id)
+    const next = isEmptyConversation(conversation) ? others : [conversation, ...others]
     persist({ conversations: next, activeConversationId: conversation.id })
     setConversations(next)
   }, [persist])

@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Description, Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react'
 import { useAskAI } from './context'
 import { conversationDate, conversationPreview, relativeConversationTime } from './history'
 
-/** Semantic history and deletion confirmation. All visual styling belongs to the consumer. */
-export function AskAIHistory() {
+/**
+ * Semantic history and deletion confirmation. All visual styling belongs to the consumer.
+ * `title`, `description` and `empty` replace the copy, such as to say which conversations these are
+ * when a host keeps one history per page or document.
+ */
+export function AskAIHistory({ title = 'Conversations', description = 'Pick up where you left off. Most recently updated first.',
+  empty = 'Your saved conversations will appear here.' }: { title?: ReactNode; description?: ReactNode; empty?: ReactNode } = {}) {
   const { conversations, activeConversation, selectConversation, deleteConversation, busy } = useAskAI()
   const [now, setNow] = useState(Date.now)
   const [pendingId, setPendingId] = useState<string>()
@@ -26,8 +31,8 @@ export function AskAIHistory() {
   }, [])
   const sorted = [...conversations].sort((a, b) => (conversationDate(b.updatedAt)?.getTime() ?? 0) - (conversationDate(a.updatedAt)?.getTime() ?? 0))
   return <section data-byok="history">
-    <h2 ref={heading} tabIndex={-1}>Conversations</h2>
-    <p data-byok="history-description">{conversations.length ? 'Pick up where you left off. Most recently updated first.' : 'Your saved conversations will appear here.'}</p>
+    <h2 ref={heading} tabIndex={-1}>{title}</h2>
+    <p data-byok="history-description">{conversations.length ? description : empty}</p>
     <ul>{sorted.map(c => {
       const date = conversationDate(c.updatedAt)
       const current = c.id === activeConversation.id

@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { defaultConnectionKey, loadConnection, loadState, migrateConnection, newConversation, sameConnection, saveConnection, saveState, subscribeConnection, type StoredState } from '../frontend/byok/storage'
+import { defaultConnectionKey, isEmptyConversation, loadConnection, loadState, migrateConnection, newConversation, sameConnection, saveConnection, saveState, subscribeConnection, type StoredState } from '../frontend/byok/storage'
 
 let items: Map<string, string>
 const windowListeners = new Map<string, Set<(event: { key: string | null }) => void>>()
@@ -63,7 +63,7 @@ test('denied storage and quota failures are surfaced without throwing', () => {
 })
 test('a shared connection key holds the connection apart from any conversations', () => {
   const connection = { providerId: 'x', values: { apiKey: 'secret' } }
-  saveState('shared', { version: 2, conversations: [{ id: 'c', title: 'Kept', messages: [], updatedAt: 1 }] })
+  saveState('shared', { version: 2, conversations: [{ id: 'c', title: 'Kept', messages: [], updatedAt: 1, draft: 'Unsent' }] })
   assert.equal(saveConnection('shared', connection), true)
   assert.deepEqual(loadConnection('shared'), connection)
   assert.equal(loadState('shared').data.conversations.length, 1, 'conversations kept')
@@ -98,7 +98,7 @@ test('new conversations get ids without crypto.randomUUID, which insecure origin
 })
 test('a connection saved inside a namespace moves to its own key once, and a disconnect stays done', () => {
   const connection = { providerId: 'x', values: { apiKey: 'old-key' } }
-  saveState('app', { version: 2, connection, conversations: [{ id: 'c', title: 'Kept', messages: [], updatedAt: 1 }], activeConversationId: 'c' })
+  saveState('app', { version: 2, connection, conversations: [{ id: 'c', title: 'Kept', messages: [], updatedAt: 1, draft: 'Unsent' }], activeConversationId: 'c' })
   const key = defaultConnectionKey('app')
   migrateConnection('app', key)
   assert.deepEqual(loadConnection(key), connection)
@@ -115,4 +115,16 @@ test('a connection saved inside a namespace moves to its own key once, and a dis
   migrateConnection('app', key)
   assert.equal(loadConnection(key)?.providerId, 'y')
   assert.ok(!items.get('app')!.includes('old-key'))
+})
+test('empty conversations are never kept: ones saved before are dropped on load', () => {
+  const message = { id: 'm', role: 'user', createdAt: new Date().toISOString(), content: [{ type: 'text', text: 'Hi' }] }
+  saveState('app', { version: 2, conversations: [
+    { id: 'empty', title: 'New conversation', messages: [], updatedAt: 3, draft: '' },
+    { id: 'draft', title: 'New conversation', messages: [], updatedAt: 2, draft: 'Unsent' },
+    { id: 'real', title: 'Hi', messages: [message as never], updatedAt: 1 },
+  ] })
+  assert.deepEqual(loadState('app').data.conversations.map(c => c.id), ['draft', 'real'])
+  assert.equal(isEmptyConversation(newConversation()), true)
+  assert.equal(isEmptyConversation({ messages: [], draft: '  ' }), true)
+  assert.equal(isEmptyConversation({ messages: [], draft: 'x' }), false)
 })

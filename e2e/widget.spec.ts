@@ -606,6 +606,79 @@ test('launcher keeps its label and dimensions when dragged against the right edg
   }
 })
 
+test('the chat resizes from every edge and corner, like an OS window, the opposite edges staying put', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open Ask AI', exact: true }).click()
+  const shell = page.locator('.demo-chat-shell')
+  // Move it off its corner first, so the right and bottom edges have room.
+  const start = (await shell.boundingBox())!
+  await page.mouse.move(start.x + 160, start.y + 18)
+  await page.mouse.down()
+  await page.mouse.move(start.x - 400, start.y - 300, { steps: 8 })
+  await page.mouse.up()
+  const drag = async (name: string, dx: number, dy: number) => {
+    const before = (await shell.boundingBox())!
+    const handle = (await page.getByRole('button', { name, exact: true }).boundingBox())!
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(handle.x + handle.width / 2 + dx, handle.y + handle.height / 2 + dy, { steps: 6 })
+    await page.mouse.up()
+    return { before, after: (await shell.boundingBox())! }
+  }
+  let { before, after } = await drag('Resize chat from the right', 80, 0)
+  expect(after.x).toBeCloseTo(before.x, 0)
+  expect(after.width).toBeCloseTo(before.width + 80, 0)
+  ;({ before, after } = await drag('Resize chat from the bottom', 0, 60))
+  expect(after.y).toBeCloseTo(before.y, 0)
+  expect(after.height).toBeCloseTo(before.height + 60, 0)
+  ;({ before, after } = await drag('Resize chat from the bottom right', -50, -40))
+  expect([after.x, after.y]).toEqual([before.x, before.y].map(v => expect.closeTo(v, 0)))
+  expect(after.width).toBeCloseTo(before.width - 50, 0)
+  expect(after.height).toBeCloseTo(before.height - 40, 0)
+  ;({ before, after } = await drag('Resize chat from the bottom left', -30, 20))
+  expect(after.x + after.width).toBeCloseTo(before.x + before.width, 0)
+  expect(after.y).toBeCloseTo(before.y, 0)
+  expect(after.width).toBeCloseTo(before.width + 30, 0)
+  ;({ before, after } = await drag('Resize chat from the top right', 30, 20))
+  expect(after.x).toBeCloseTo(before.x, 0)
+  expect(after.y + after.height).toBeCloseTo(before.y + before.height, 0)
+  expect(after.width).toBeCloseTo(before.width + 30, 0)
+  expect(after.height).toBeCloseTo(before.height - 20, 0)
+  // Arrow keys move the focused handle's edge the same way.
+  await page.getByRole('button', { name: 'Resize chat from the right', exact: true }).focus()
+  const keyed = (await shell.boundingBox())!
+  await page.keyboard.press('ArrowRight')
+  expect((await shell.boundingBox())!.width).toBeCloseTo(keyed.width + 24, 0)
+  expect((await shell.boundingBox())!.x).toBeCloseTo(keyed.x, 0)
+  // The size and place survive a reload.
+  const final = (await shell.boundingBox())!
+  await page.reload()
+  await page.getByRole('button', { name: 'Open Ask AI', exact: true }).click()
+  for (const key of ['x', 'y', 'width', 'height'] as const) expect((await shell.boundingBox())![key]).toBeCloseTo(final[key], 0)
+})
+
+test('new conversations are not listed until they hold something', async ({ page }) => {
+  await page.addInitScript(() => {
+    if (localStorage.getItem('byok-ai:conversations:v1')) return
+    const message = { id: 'm1', role: 'user', createdAt: new Date().toISOString(), content: [{ type: 'text', text: 'An earlier question' }], attachments: [], metadata: { custom: {} } }
+    localStorage.setItem('byok-ai:conversations:v1', JSON.stringify({ version: 2, activeConversationId: 'earlier', conversations: [{ id: 'earlier', title: 'An earlier question', updatedAt: Date.now(), messages: [message] }],
+      connection: { providerId: 'compatible', values: { apiKey: 'test', model: 'test', baseURL: 'https://model.example/v1' } } }))
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open Ask AI', exact: true }).click()
+  await page.getByRole('button', { name: 'New chat', exact: true }).click()
+  await page.getByRole('button', { name: 'New chat', exact: true }).click()
+  await page.getByRole('button', { name: 'Conversation history', exact: true }).click()
+  await expect(page.locator('[data-byok="history-title"]')).toHaveText(['An earlier question'])
+  await page.locator('[data-byok="history-select"]').first().click()
+  await expect(page.getByText('An earlier question').first()).toBeVisible()
+  await page.reload()
+  await page.getByRole('button', { name: 'Open Ask AI', exact: true }).click()
+  await page.getByRole('button', { name: 'Conversation history', exact: true }).click()
+  await expect(page.locator('[data-byok="history-title"]')).toHaveText(['An earlier question'])
+})
+
 test('chat header moves the window and preserves its position through resize, maximize, and reload', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 })
   await page.goto('/')

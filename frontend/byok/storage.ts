@@ -21,6 +21,9 @@ function randomId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16))
   return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')
 }
+/** A conversation with nothing in it: no messages and no unsent draft. It is never saved. */
+export const isEmptyConversation = (conversation: Pick<Conversation, 'messages' | 'draft'>) =>
+  conversation.messages.length === 0 && !conversation.draft?.trim()
 export function newConversation(): Conversation {
   return { id: randomId(), title: 'New conversation', updatedAt: Date.now(), messages: [], draft: '' }
 }
@@ -43,8 +46,10 @@ function readConversations(value: unknown): Conversation[] {
           ? { status: { type: 'incomplete', reason: 'cancelled' } } : {}),
       } as unknown as ThreadMessage)
     }
-    return [{ id: c.id, title: c.title, updatedAt: typeof c.updatedAt === 'number' ? c.updatedAt : 0,
-      messages, draft: typeof c.draft === 'string' ? c.draft : '' }]
+    const conversation = { id: c.id, title: c.title, updatedAt: typeof c.updatedAt === 'number' ? c.updatedAt : 0,
+      messages, draft: typeof c.draft === 'string' ? c.draft : '' }
+    // Empty ones were saved by "New conversation" before it stopped saving them.
+    return isEmptyConversation(conversation) ? [] : [conversation]
   })
 }
 /** Reads the current format or migrates the original conversation-only array. Never logs secrets. */
