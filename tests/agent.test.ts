@@ -5,7 +5,7 @@ import { simulateReadableStream } from 'ai'
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider'
 import type { ChatModelRunOptions, ChatModelRunResult, ThreadMessage } from '@assistant-ui/react'
 import { createApp } from '../backend/app'
-import { createBrowserAdapter, toModelMessages, INCOMPLETE_MESSAGES, FINAL_STEP_INSTRUCTION } from '../frontend/byok/agent'
+import { createBrowserAdapter, toModelMessages, INCOMPLETE_MESSAGES, FINAL_STEP_INSTRUCTION, CONNECTION_LOST_MESSAGE } from '../frontend/byok/agent'
 
 const usage = { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } }
 function stream(chunks: LanguageModelV4StreamPart[]) {
@@ -56,12 +56,38 @@ test('an answer cut off by the output limit, or out of steps, says so; maxOutput
   assert.equal(cut.model.doStreamCalls[0].maxOutputTokens, 1234)
   const steps = await run('tool-calls', 1)
   assert.equal(steps.errors.at(-1), INCOMPLETE_MESSAGES.steps)
+  // Silent every time: retried once, then the notice.
   const silent = new MockLanguageModelV4({ doStream: async () => stream([{ type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }]) })
   const errors: string[] = []
   const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => silent },
     values: {}, servers: [], systemPrompt: '', maxSteps: 2, onError: e => errors.push(e) })
   for await (const _ of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ }
   assert.equal(errors.at(-1), INCOMPLETE_MESSAGES.empty)
+  assert.equal(silent.doStreamCalls.length, 2, 'asked once more')
+})
+test('an answer that comes back empty is asked for once more, without tools', async () => {
+  const blank = stream([{ type: 'text-start', id: 't' }, { type: 'text-delta', id: 't', delta: '\n\n' }, { type: 'text-end', id: 't' },
+    { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }])
+  const answer = stream([{ type: 'text-start', id: 'a' }, { type: 'text-delta', id: 'a', delta: 'The answer.' }, { type: 'text-end', id: 'a' },
+    { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }])
+  const model = new MockLanguageModelV4({ doStream: [blank, answer] })
+  const errors: string[] = []
+  const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
+    values: {}, servers: [], systemPrompt: 'Help.', maxSteps: 4, onError: e => errors.push(e) })
+  let last: ChatModelRunResult = {}
+  for await (const part of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) last = part
+  assert.deepEqual(errors, [''])
+  assert.ok(last.content?.some(p => p.type === 'text' && p.text.includes('The answer.')))
+  assert.equal(model.doStreamCalls[1].toolChoice?.type, 'none')
+  assert.ok(JSON.stringify(model.doStreamCalls[1].prompt).includes(FINAL_STEP_INSTRUCTION))
+})
+test('a dropped connection says so instead of blaming the key or CORS', async () => {
+  const errors: string[] = []
+  const model = new MockLanguageModelV4({ doStream: async () => { throw new TypeError('Failed to fetch') } })
+  const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
+    values: {}, servers: [], systemPrompt: '', maxSteps: 2, onError: e => errors.push(e) })
+  await assert.rejects(async () => { for await (const _ of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ } })
+  assert.equal(errors.at(-1), CONNECTION_LOST_MESSAGE)
 })
 test('after the tool budget, and on the last step, the model answers without tools', async () => {
   const toolStep = (id: string) => stream([{ type: 'tool-call', toolCallId: id, toolName: 'missing_tool', input: '{}' },
