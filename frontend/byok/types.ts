@@ -1,0 +1,49 @@
+import type { ComponentType, ReactNode } from 'react'
+import type { LanguageModel } from 'ai'
+import type { TextMessagePartComponent, ToolCallMessagePartComponent } from '@assistant-ui/react'
+
+export type ProviderValues = Record<string, string>
+export interface ProviderFormProps {
+  values: ProviderValues
+  onChange: (values: ProviderValues) => void
+}
+export interface ProviderPreset {
+  id: string
+  name: string
+  description: string
+  defaultValues: ProviderValues
+  fields?: { name: string; label: string; type?: 'text' | 'password' | 'url'; placeholder?: string; required?: boolean }[]
+  Form?: ComponentType<ProviderFormProps>
+  validate?: (values: ProviderValues) => string | undefined
+  createModel: (values: ProviderValues) => LanguageModel
+}
+export interface McpServerConfig {
+  /** Unique identifier; used to namespace tool names. */
+  id: string
+  name: string
+  url: string
+  headers?: Record<string, string> | (() => Promise<Record<string, string>>)
+}
+export interface AskAIOptions {
+  providers?: ProviderPreset[]
+  mcpServers?: McpServerConfig[]
+  systemPrompt?: string
+  storageKey?: string
+  title?: string
+  maxSteps?: number
+}
+
+export interface AskAIProviderProps extends AskAIOptions { children: ReactNode }
+export interface AskAIChatProps {
+  /** Override message text and tool rendering while retaining chat behavior. */
+  components?: {
+    Text?: TextMessagePartComponent
+    ToolFallback?: ToolCallMessagePartComponent
+    /** Layout slots run inside the existing assistant-ui runtime and message scopes. */
+    UserMessage?: ComponentType
+    AssistantMessage?: ComponentType
+    Empty?: ComponentType
+    Composer?: ComponentType
+  }
+}
+export interface AskAIProps extends AskAIOptions, AskAIChatProps { children?: ReactNode }
