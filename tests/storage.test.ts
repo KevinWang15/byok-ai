@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { loadConnection, loadState, newConversation, sameConnection, saveConnection, saveState, subscribeConnection, type StoredState } from '../frontend/byok/storage'
+import { defaultConnectionKey, loadConnection, loadState, migrateConnection, newConversation, sameConnection, saveConnection, saveState, subscribeConnection, type StoredState } from '../frontend/byok/storage'
 
 let items: Map<string, string>
 const windowListeners = new Map<string, Set<(event: { key: string | null }) => void>>()
@@ -95,4 +95,24 @@ test('new conversations get ids without crypto.randomUUID, which insecure origin
     assert.equal(ids.size, 100)
     for (const id of ids) assert.match(id, /^[0-9a-f]{32}$/)
   } finally { Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: original }) }
+})
+test('a connection saved inside a namespace moves to its own key once, and a disconnect stays done', () => {
+  const connection = { providerId: 'x', values: { apiKey: 'old-key' } }
+  saveState('app', { version: 2, connection, conversations: [{ id: 'c', title: 'Kept', messages: [], updatedAt: 1 }], activeConversationId: 'c' })
+  const key = defaultConnectionKey('app')
+  migrateConnection('app', key)
+  assert.deepEqual(loadConnection(key), connection)
+  assert.equal(loadState('app').data.connection, undefined, 'the namespace no longer holds it')
+  assert.equal(loadState('app').data.conversations.length, 1)
+  assert.equal(loadState('app').data.activeConversationId, 'c')
+  // Disconnected afterwards: migrating again brings nothing back.
+  saveConnection(key, undefined)
+  migrateConnection('app', key)
+  assert.equal(loadConnection(key), undefined)
+  // A key that already has a connection keeps it.
+  saveConnection(key, { providerId: 'y', values: { apiKey: 'new-key' } })
+  saveState('app', { version: 2, connection, conversations: [] })
+  migrateConnection('app', key)
+  assert.equal(loadConnection(key)?.providerId, 'y')
+  assert.ok(!items.get('app')!.includes('old-key'))
 })

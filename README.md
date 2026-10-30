@@ -87,7 +87,9 @@ function Editor() {
 
 The runtime restarts only when the set of tool names changes; a call made after the page's state changed, even within one answer, runs the definition from the latest render.
 
-Several assistants on one site, each with its own prompt, tools and conversations, can share one provider connection with `connectionKey`: the connection is saved under that key instead of `storageKey`, and connecting or disconnecting in one updates every other mounted assistant with the same key, in the same tab and in other tabs. A running answer finishes with the connection it started with.
+The provider connection is saved under its own key, `${storageKey}:connection` by default, apart from the conversations: they are written several times a second while an answer streams, and another tab only needs to hear about the connection. A connection saved inside the conversations' key (as before) moves there the first time the provider mounts.
+
+Several assistants on one site, each with its own prompt, tools and conversations, can share one provider connection by passing the same `connectionKey` (it must differ from every `storageKey`). Connecting or disconnecting in one updates every other mounted assistant with that key, in the same tab and in other tabs. A running answer finishes with the connection it started with.
 
 ## Headless UI and custom composition
 

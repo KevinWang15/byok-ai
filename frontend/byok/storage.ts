@@ -66,7 +66,22 @@ export function loadState(key: string): { data: StoredState; error: boolean } {
     }, error: false }
   } catch { return { data: empty, error: true } }
 }
-/** The connection saved under a key: alone, or inside a key's full state. */
+/** Where a namespace's connection is saved unless the host shares one: beside its conversations. */
+export const defaultConnectionKey = (storageKey: string) => `${storageKey}:connection`
+
+/**
+ * Moves a connection saved inside a namespace's state (as before connections had their own key) to
+ * the connection key, once, unless that key already holds one. The namespace's state keeps no
+ * connection afterwards, so a later disconnect can't be undone by migrating it again.
+ */
+export function migrateConnection(storageKey: string, connectionKey: string): void {
+  const { data, error } = loadState(storageKey)
+  if (error || !data.connection) return
+  if (!loadConnection(connectionKey)) saveConnection(connectionKey, data.connection)
+  saveState(storageKey, { ...data, connection: undefined })
+}
+
+/** The connection saved under a connection key. */
 export function loadConnection(key: string): StoredConnection | undefined {
   return loadState(key).data.connection
 }

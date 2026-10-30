@@ -36,9 +36,10 @@ export interface AskAIOptions {
   systemPrompt?: string
   storageKey?: string
   /**
-   * Where the provider connection is saved; `storageKey` when omitted. Assistants with the
-   * same key share one connection: connecting or disconnecting in one updates the others, in
-   * this tab and in other tabs. Each keeps its own conversations under its `storageKey`.
+   * Where the provider connection is saved: `${storageKey}:connection` when omitted, and never
+   * `storageKey` itself. Assistants with the same key share one connection: connecting or
+   * disconnecting in one updates the others, in this tab and in other tabs. Each keeps its own
+   * conversations under its `storageKey`.
    */
   connectionKey?: string
   title?: string

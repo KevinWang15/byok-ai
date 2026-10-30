@@ -729,7 +729,7 @@ test('provider settings save or discard changes and keep credentials hidden by d
   await page.getByRole('button', { name: /Google Gemini/ }).click()
   await expect(key).toHaveValue('')
   // Choosing a different form must not alter the active provider until saving.
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('byok-ai:conversations:v1')!).connection.providerId)).toBe('compatible')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('byok-ai:conversations:v1:connection')!).connection.providerId)).toBe('compatible')
   await page.getByRole('button', { name: 'Change provider', exact: true }).click()
   await page.getByRole('button', { name: /OpenAI compatible/ }).click()
   await expect(key).toHaveValue('test-settings-key')

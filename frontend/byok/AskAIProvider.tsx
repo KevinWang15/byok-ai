@@ -4,7 +4,7 @@ import { AskAIContext, type AskAIContextValue, type AskAIPage, type ProviderConn
 import { defaultProviders } from './providers'
 import { createBrowserAdapter } from './agent'
 import {
-  loadConnection, loadState, newConversation, notifyConnection, sameConnection, saveConnection, saveState, subscribeConnection,
+  defaultConnectionKey, loadConnection, loadState, migrateConnection, newConversation, sameConnection, saveConnection, saveState, subscribeConnection,
   type Conversation, type StoredConnection, type StoredState,
 } from './storage'
 import type { ToolSet } from 'ai'
@@ -85,14 +85,16 @@ function Runtime({ state, clientTools, systemPrompt, maxSteps, maxOutputTokens, 
 }
 
 function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVERS, clientTools = NO_TOOLS, systemPrompt = DEFAULT_PROMPT,
-  storageKey = 'byok-ai:conversations:v1', connectionKey = storageKey, title = 'Ask AI', maxSteps = 8, maxOutputTokens, maxToolCalls, children }: AskAIProviderProps) {
+  storageKey = 'byok-ai:conversations:v1', connectionKey = defaultConnectionKey(storageKey), title = 'Ask AI', maxSteps = 8, maxOutputTokens, maxToolCalls, children }: AskAIProviderProps) {
+  // The connection has its own key, so conversation writes (several a second while an answer
+  // streams) never make another tab re-read the conversations to see whether it changed.
+  if (connectionKey === storageKey) throw new Error('connectionKey must differ from storageKey.')
   const [initial] = useState(() => {
-    const loaded = loadState(storageKey)
-    return connectionKey === storageKey ? loaded : { ...loaded, data: { ...loaded.data, connection: undefined } }
+    migrateConnection(storageKey, connectionKey)
+    return loadState(storageKey)
   })
   const [open, setOpen] = useState(false)
-  const [connection, setConnection] = useState<ProviderConnection | undefined>(() =>
-    connectionOf(providers, connectionKey === storageKey ? initial.data.connection : loadConnection(connectionKey)))
+  const [connection, setConnection] = useState<ProviderConnection | undefined>(() => connectionOf(providers, loadConnection(connectionKey)))
   const [page, updatePage] = useState<AskAIPage>('chat')
   const [conversations, setConversations] = useState(initial.data.conversations)
   const [activeConversation, setActive] = useState(() =>
@@ -105,19 +107,13 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
     storeRef.current = next
     setStorageError(!saveState(storageKey, next))
   }, [storageKey])
-  // A separate connection key holds only the connection; this key's state never does.
-  const persistConnection = (saved: StoredState['connection']) => {
-    if (connectionKey !== storageKey) return setStorageError(!saveConnection(connectionKey, saved))
-    persist({ connection: saved })
-    notifyConnection(connectionKey)
-  }
+  const persistConnection = (saved: StoredState['connection']) => setStorageError(!saveConnection(connectionKey, saved))
   // Another assistant with this connection key (in this tab or another) connected or disconnected:
   // follow it. A running answer finishes with the connection it started with.
   useEffect(() => subscribeConnection(connectionKey, () => {
     const saved = loadConnection(connectionKey)
-    if (connectionKey === storageKey) storeRef.current = { ...storeRef.current, connection: saved }
     setConnection(current => sameConnection(current && { providerId: current.provider.id, values: current.values }, saved) ? current : connectionOf(providers, saved))
-  }), [connectionKey, storageKey, providers])
+  }), [connectionKey, providers])
   const save = useCallback((conversation: Conversation) => {
     const next = [conversation, ...storeRef.current.conversations.filter(c => c.id !== conversation.id)]
     persist({ conversations: next, activeConversationId: conversation.id })
@@ -174,6 +170,6 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
 export function AskAIProvider(props: AskAIProviderProps) {
   // A namespace change restores that namespace’s saved provider and conversation state.
   const storageKey = props.storageKey ?? 'byok-ai:conversations:v1'
-  return <ProviderState key={storageKey + '\n' + (props.connectionKey ?? storageKey)} {...props} />
+  return <ProviderState key={storageKey + '\n' + (props.connectionKey ?? defaultConnectionKey(storageKey))} {...props} />
 }
 export type { AskAIOptions }
