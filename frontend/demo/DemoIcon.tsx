@@ -1,7 +1,7 @@
 import {
   ArrowLeft, ArrowRight, ArrowUp, Check, ChevronRight, Copy, Grip, History,
   Maximize2, Minimize2, MoreHorizontal, Plug, Settings, ShieldCheck, Sparkles,
-  Square, SquarePen, X, Eye, EyeOff, HardDrive,
+  Square, SquarePen, X, Eye, EyeOff, HardDrive, RotateCcw,
 } from 'lucide-react'
 
 const icons = {
@@ -9,7 +9,7 @@ const icons = {
   send: ArrowUp, stop: Square, chevron: ChevronRight, check: Check, tools: Plug,
   copy: Copy, sparkle: Sparkles, maximize: Maximize2, restore: Minimize2,
   resize: Grip, arrow: ArrowRight, shield: ShieldCheck, more: MoreHorizontal,
-  eye: Eye, eyeOff: EyeOff, storage: HardDrive,
+  eye: Eye, eyeOff: EyeOff, storage: HardDrive, regenerate: RotateCcw,
 }
 export type DemoIconName = keyof typeof icons
 

@@ -112,7 +112,7 @@ The demo composes its own shell in `frontend/demo/DemoAssistant.tsx`, instead of
 | --- | --- |
 | Provider connection, validation, and persistence | Provider branding and setup layout |
 | Conversation selection, streaming, cancellation | Header navigation and visual hierarchy |
-| assistant-ui message scopes and Markdown | Avatars, bubbles, typography, tables, copy controls |
+| assistant-ui message scopes, Markdown, copy and regenerate actions | Avatars, bubbles, typography, tables, action bar styling |
 | Tool execution and actual status/results | Friendly tool names and progressive disclosure |
 | Headless UI dialog accessibility | Panel size, responsive layout, colors, icons |
 
@@ -139,6 +139,8 @@ These optional slots work on `AskAIChat`, `AskAIWidget`, and `AskAI`:
 - `UserMessage` and `AssistantMessage`: replace the entire message layout inside its assistant-ui message scope.
 - `Empty`: replace the empty conversation view; suggestions can use `ThreadPrimitive.Suggestion`.
 - `Composer`: replace the composer using `ComposerPrimitive.Root/Input/Send/Cancel`.
+
+`AskAIMessageActions` is the assistant message's action bar: **Copy** (the message text) and **Regenerate** (asks the model again from the preceding user message and keeps the new answer). The default assistant message includes it. It hides while a response runs, shows on the latest answer and on earlier ones while hovered or focused, and disables Regenerate without a provider. It exposes `data-byok="message-actions"`, `message-copy` (with `data-copied` after copying) and `message-regenerate`. Pass `copy`, `copied` and `regenerate` to replace the labels, for example with icons, and native props such as `className`. Regenerating replaces the saved answer; the earlier one is not kept as a branch.
 
 `AskAIMessageContent` renders text and tools with the enclosing chat's `Text` and `ToolFallback` overrides. Use it in custom message layouts to preserve those overrides. Default message wrappers expose `data-byok="message"` and `data-role="user|assistant|system"`. Define slot components at module scope to avoid remounting them during streaming.
 

@@ -1,7 +1,7 @@
 import { useId } from 'react'
 import { Button, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
-import { ActionBarPrimitive, ComposerPrimitive, MessagePrimitive, ThreadPrimitive, groupPartByType, useAuiState, type ToolCallMessagePartProps } from '@assistant-ui/react'
-import { AskAIChat, AskAIHistory, AskAIMessageContent, AskAIPanel, AskAITools, AskAITrigger, MarkdownText, useAskAI } from '../byok'
+import { ComposerPrimitive, MessagePrimitive, ThreadPrimitive, groupPartByType, useAuiState, type ToolCallMessagePartProps } from '@assistant-ui/react'
+import { AskAIChat, AskAIHistory, AskAIMessageActions, AskAIMessageContent, AskAIPanel, AskAITools, AskAITrigger, MarkdownText, useAskAI } from '../byok'
 
 import { DemoOrb } from './DemoOrb'
 import { DemoIcon as Icon, type DemoIconName } from './DemoIcon'
@@ -61,9 +61,9 @@ function DemoAssistantMessage() {
           default: return null
         }
       }}</MessagePrimitive.GroupedParts>
-      <ActionBarPrimitive.Root className="chat-message-actions">
-        <ActionBarPrimitive.Copy className="chat-copy" aria-label="Copy response" title="Copy response"><Icon name="copy" /></ActionBarPrimitive.Copy>
-      </ActionBarPrimitive.Root>
+      <AskAIMessageActions className="chat-message-actions"
+        copy={<><Icon name="copy" /><span>Copy</span></>} copied={<><Icon name="check" /><span>Copied</span></>}
+        regenerate={<><Icon name="regenerate" /><span>Regenerate</span></>} />
     </div>
   </MessagePrimitive.Root>
 }

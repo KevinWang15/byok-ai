@@ -53,6 +53,50 @@ test('setup, browser streaming, history, settings, reload and deletion', async (
   await expect(page.getByRole('button', { name: 'Open Ask AI' })).toBeFocused()
   expect(errors).toEqual([])
 })
+test('assistant answers can be copied and regenerated, and the regenerated answer is kept', async ({ page, context }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  let calls = 0
+  const prompts: unknown[] = []
+  await page.route('https://model.example/v1/chat/completions', route => {
+    prompts.push(route.request().postDataJSON().messages)
+    const text = ++calls === 1 ? 'First answer.' : 'Second answer.'
+    const chunks = [
+      { id: 'test', object: 'chat.completion.chunk', created: 1, model: 'test', choices: [{ index: 0, delta: { role: 'assistant', content: text }, finish_reason: null }] },
+      { id: 'test', object: 'chat.completion.chunk', created: 1, model: 'test', choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+    ]
+    return route.fulfill({ contentType: 'text/event-stream', body: chunks.map(c => 'data: ' + JSON.stringify(c) + '\n\n').join('') + 'data: [DONE]\n\n' })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Open Ask AI' }).click()
+  await page.getByRole('button', { name: /OpenAI compatible/ }).click()
+  await page.getByLabel('API base URL').fill('https://model.example/v1')
+  await page.getByLabel('Model', { exact: true }).fill('test')
+  await page.getByRole('button', { name: 'Connect provider' }).click()
+  await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Question')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('First answer.', { exact: true })).toBeVisible()
+
+  const actions = page.locator('[data-byok="message-actions"]')
+  await expect(actions).toHaveCount(1)
+  await actions.getByRole('button', { name: 'Copy' }).click()
+  await expect(actions.getByRole('button', { name: 'Copied' })).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('First answer.')
+
+  await actions.getByRole('button', { name: 'Regenerate' }).click()
+  await expect(page.getByText('Second answer.', { exact: true })).toBeVisible()
+  await expect(page.getByText('First answer.', { exact: true })).toHaveCount(0)
+  // The model is asked the same question again, without the answer being replaced.
+  expect(JSON.stringify(prompts[1])).toBe(JSON.stringify(prompts[0]))
+
+  await page.reload()
+  await page.getByRole('button', { name: 'Open Ask AI' }).click()
+  await expect(page.getByText('Second answer.', { exact: true })).toBeVisible()
+  await expect(page.getByText('First answer.', { exact: true })).toHaveCount(0)
+  await expect(page.getByText('Question', { exact: true })).toHaveCount(1)
+  expect(errors).toEqual([])
+})
 test('widget fits a mobile viewport', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.goto('/')

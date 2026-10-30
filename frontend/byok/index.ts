@@ -1,4 +1,4 @@
-export { AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIHistory, AskAITools } from './AskAI'
+export { AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIMessageActions, AskAIHistory, AskAITools } from './AskAI'
 export { AskAIProvider } from './AskAIProvider'
 export { useAskAI } from './context'
 export type { AskAIContextValue, AskAIPage, ProviderConnection } from './context'

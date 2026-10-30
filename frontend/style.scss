@@ -146,11 +146,13 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 .chat-tool-json { padding: 8px; background: #f7f4fa; border-radius: 6px; font-size: 9px; color: #937fa2; }
 .chat-tool-json strong { font-size: 9px; font-weight: 550; }
 .chat-tool-json pre { font-size: 9px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
-.chat-message-actions { display: flex; margin-top: 9px; opacity: 0; transition: opacity .15s; }
-.chat-assistant-message:hover .chat-message-actions, .chat-message-actions:focus-within { opacity: 1; }
-.chat-copy { display: grid; place-items: center; width: 24px; height: 24px; background: transparent; border: 0; color: #b0a1bb!important; padding: 4px; border-radius: 5px; }
-.chat-copy svg { width: 13px; height: 13px; }
-.chat-copy:hover { background: #f0eaf6; }
+/* A faint bar: visible on the latest answer, on earlier ones while hovered or focused (the library hides it otherwise). */
+.chat-message-actions { display: inline-flex; gap: 1px; margin-top: 9px; padding: 2px; border: 1px solid #f1ebf5; border-radius: 8px; background: #fcfaFE; }
+.chat-message-actions button { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: #a593b2!important; font-size: 10px!important; }
+.chat-message-actions button svg { width: 12px; height: 12px; }
+.chat-message-actions button:hover:not(:disabled) { background: #f2ecf7; color: #7e6a8d!important; }
+.chat-message-actions button:disabled { opacity: .45; }
+.chat-message-actions [data-copied] { color: #7f9b7d!important; }
 .chat-working { display: flex; align-items: center; gap: 7px; color: #a18caf; font-size: 10px; margin-top: 8px; }
 .chat-compose-area { flex-shrink: 0; padding: 12px 18px 14px; border-top: 1px solid #f0eaf4; background: #fefcfff2; }
 .chat-compose { display: flex; align-items: flex-end; gap: 9px; padding: 11px 10px 11px 14px; border: 1px solid #e7dded; border-radius: 16px; background: #fff; box-shadow: 0 2px 7px #8c74a306; }
@@ -248,7 +250,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
   .demo-chat-shell { width: min(var(--chat-width, calc(100vw - 24px)), calc(100vw - 24px)); height: min(var(--chat-height, 720px), calc(100dvh - 98px)); border-radius: 20px; }
   .chat-header { padding: 17px 14px; gap: 8px; }.chat-header-actions { gap: 0; }.chat-title > span { max-width: 135px; }.chat-icon-button { width: 29px; height: 30px; padding: 6px; }
   .demo-chat-shell [data-byok="messages"] { padding: 20px 17px 6px; }.chat-user-message { padding-left: 22px; }
-  .chat-compose-area { padding: 12px 14px; }.chat-empty { padding-top: 8px; }.chat-message-actions { opacity: 1; }
+  .chat-compose-area { padding: 12px 14px; }.chat-empty { padding-top: 8px; }
 }
 
 /* Window controls belong to the demo shell, not the headless component. */

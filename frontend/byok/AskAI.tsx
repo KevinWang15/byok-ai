@@ -1,5 +1,5 @@
-import { useContext, useId, useState, type ComponentPropsWithoutRef } from 'react'
-import { ThreadPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState, type ToolCallMessagePartComponent } from '@assistant-ui/react'
+import { useContext, useId, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { ActionBarPrimitive, ThreadPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState, type ToolCallMessagePartComponent } from '@assistant-ui/react'
 import { Button, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Input, Label, Legend } from '@headlessui/react'
 import { AskAIProvider } from './AskAIProvider'
 import { useAskAI } from './context'
@@ -22,9 +22,25 @@ export function AskAIMessageContent() {
     tools: { Fallback: components?.ToolFallback ?? Tool },
   }} />
 }
+/**
+ * Unstyled actions for the enclosing assistant message: copy its text and regenerate it.
+ * Hidden while a response runs; on earlier messages only while hovered or focused.
+ * Regenerate is disabled without a provider. `copy`, `copied` and `regenerate` replace the labels.
+ */
+export function AskAIMessageActions({ copy = 'Copy response', copied = 'Copied', regenerate = 'Regenerate response', ...props }:
+  Omit<ComponentPropsWithoutRef<typeof ActionBarPrimitive.Root>, 'children'> & { copy?: ReactNode; copied?: ReactNode; regenerate?: ReactNode }) {
+  const { connection } = useAskAI()
+  const isCopied = useAuiState(state => state.message.isCopied)
+  return <ActionBarPrimitive.Root data-byok="message-actions" hideWhenRunning autohide="not-last" {...props}>
+    <ActionBarPrimitive.Copy data-byok="message-copy">{isCopied ? copied : copy}</ActionBarPrimitive.Copy>
+    <ActionBarPrimitive.Reload data-byok="message-regenerate" disabled={!connection}>{regenerate}</ActionBarPrimitive.Reload>
+  </ActionBarPrimitive.Root>
+}
 function Message() {
   const role = useAuiState(state => state.message.role)
-  return <MessagePrimitive.Root data-byok="message" data-role={role}><AskAIMessageContent /></MessagePrimitive.Root>
+  return <MessagePrimitive.Root data-byok="message" data-role={role}>
+    <AskAIMessageContent />{role === 'assistant' && <AskAIMessageActions />}
+  </MessagePrimitive.Root>
 }
 function DefaultEmpty() { return <p>Start a conversation.</p> }
 function DefaultComposer() {
