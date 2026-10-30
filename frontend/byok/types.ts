@@ -33,6 +33,8 @@ export interface AskAIOptions {
   maxSteps?: number
   /** Output token limit per model step; the provider's default when omitted. */
   maxOutputTokens?: number
+  /** Tool calls allowed per answer; after that the model answers without tools. Unlimited when omitted. */
+  maxToolCalls?: number
 }
 
 export interface AskAIProviderProps extends AskAIOptions { children: ReactNode }

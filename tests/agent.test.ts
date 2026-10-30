@@ -5,7 +5,7 @@ import { simulateReadableStream } from 'ai'
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider'
 import type { ChatModelRunOptions, ChatModelRunResult, ThreadMessage } from '@assistant-ui/react'
 import { createApp } from '../backend/app'
-import { createBrowserAdapter, toModelMessages, INCOMPLETE_MESSAGES } from '../frontend/byok/agent'
+import { createBrowserAdapter, toModelMessages, INCOMPLETE_MESSAGES, FINAL_STEP_INSTRUCTION } from '../frontend/byok/agent'
 
 const usage = { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } }
 function stream(chunks: LanguageModelV4StreamPart[]) {
@@ -56,6 +56,24 @@ test('an answer cut off by the output limit, or out of steps, says so; maxOutput
   assert.equal(cut.model.doStreamCalls[0].maxOutputTokens, 1234)
   const steps = await run('tool-calls', 1)
   assert.equal(steps.errors.at(-1), INCOMPLETE_MESSAGES.steps)
+})
+test('after the tool budget, and on the last step, the model answers without tools', async () => {
+  const toolStep = (id: string) => stream([{ type: 'tool-call', toolCallId: id, toolName: 'missing_tool', input: '{}' },
+    { type: 'tool-call', toolCallId: id + 'b', toolName: 'missing_tool', input: '{}' }, { type: 'finish', finishReason: { unified: 'tool-calls', raw: undefined }, usage }])
+  const answer = stream([{ type: 'text-start', id: 't' }, { type: 'text-delta', id: 't', delta: 'Done.' }, { type: 'text-end', id: 't' },
+    { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }])
+  const run = async (maxSteps: number, maxToolCalls?: number) => {
+    const model = new MockLanguageModelV4({ doStream: [toolStep('a'), toolStep('b'), answer] })
+    const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
+      values: {}, servers: [], systemPrompt: 'Help.', maxSteps, maxToolCalls, onError: () => {} })
+    for await (const _ of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ }
+    return model.doStreamCalls.map(call => ({ toolChoice: call.toolChoice?.type, final: JSON.stringify(call.prompt).includes(FINAL_STEP_INSTRUCTION) }))
+  }
+  // Two calls spend a budget of two: the second step answers.
+  assert.deepEqual((await run(10, 2)).map(call => call.final), [false, true])
+  assert.equal((await run(10, 2))[1].toolChoice, 'none')
+  // Without a budget only the last step is held to answering.
+  assert.deepEqual((await run(3)).map(call => call.final), [false, false, true])
 })
 test('interrupted tool calls always get a matching result in subsequent history', () => {
   const assistant = { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'c', toolName: 'tool', args: {}, argsText: '{}' }] } as unknown as ThreadMessage

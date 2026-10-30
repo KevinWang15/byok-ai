@@ -1,4 +1,4 @@
-import { streamText, stepCountIs, type ModelMessage, type ToolSet } from 'ai'
+import { streamText, stepCountIs, ToolChoiceViolationError, type ModelMessage, type ToolSet } from 'ai'
 import { createMCPClient, type MCPClient } from '@ai-sdk/mcp'
 import type { ChatModelAdapter, ThreadMessage, ThreadAssistantMessagePart } from '@assistant-ui/react'
 import type { McpServerConfig, ProviderPreset, ProviderValues } from './types'
@@ -25,6 +25,9 @@ export function toModelMessages(messages: readonly ThreadMessage[]): ModelMessag
   return output
 }
 
+/** Added to the system prompt for the step that must answer: the tool budget is spent, or it is the last step. */
+export const FINAL_STEP_INSTRUCTION = 'No more tool calls are available for this answer. Answer now from the results you have, and say briefly what you could not check.'
+
 /** Shown when a response ended without finishing: cut off by the output limit, or out of steps. */
 export const INCOMPLETE_MESSAGES = {
   length: 'The answer stopped at the model\'s output limit. Ask it to continue.',
@@ -33,7 +36,7 @@ export const INCOMPLETE_MESSAGES = {
 
 export function createBrowserAdapter(options: {
   provider: ProviderPreset; values: ProviderValues; servers: McpServerConfig[]
-  systemPrompt: string; maxSteps: number; maxOutputTokens?: number; onError: (message: string) => void
+  systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number; onError: (message: string) => void
 }): ChatModelAdapter {
   return {
     async *run({ messages, abortSignal }) {
@@ -66,9 +69,18 @@ export function createBrowserAdapter(options: {
           model: options.provider.createModel(options.values),
           system: options.systemPrompt, messages: toModelMessages(messages), tools,
           stopWhen: stepCountIs(options.maxSteps), abortSignal, maxRetries: 0, onError: () => {},
+          // The last step, or the first after the tool budget is spent, answers instead of calling tools.
+          prepareStep: ({ steps, stepNumber }) => {
+            const calls = steps.reduce((total, step) => total + step.toolCalls.length, 0)
+            const spent = options.maxToolCalls !== undefined && calls >= options.maxToolCalls
+            if (!spent && stepNumber < options.maxSteps - 1) return undefined
+            return { toolChoice: 'none', instructions: [options.systemPrompt, FINAL_STEP_INSTRUCTION].filter(Boolean).join('\n\n') }
+          },
           ...(options.maxOutputTokens ? { maxOutputTokens: options.maxOutputTokens } : {}),
         })
         for await (const event of result.fullStream) {
+          // A model that calls tools on the answering step anyway has run out of steps.
+          if (event.type === 'error' && ToolChoiceViolationError.isInstance(event.error)) { options.onError(INCOMPLETE_MESSAGES.steps); break }
           if (event.type === 'error') throw event.error
           // The last step's reason: 'length' was cut off; 'tool-calls' means the step limit ended the loop.
           if (event.type === 'finish') {

@@ -258,11 +258,12 @@ For a fully custom form, supply `Form: ComponentType<ProviderFormProps>` instead
   ]}
   maxSteps={8}
   maxOutputTokens={8192}
+  maxToolCalls={12}
   systemPrompt="Help the user with this application. Use tools when needed."
 />
 ```
 
-`maxOutputTokens` caps each model step's output (the provider's default when omitted). An answer that ends unfinished is never silent: when the last step stops at the output limit, or the step limit ends the loop while tools are still being called, the chat shows a notice through `error` (`INCOMPLETE_MESSAGES.length` or `.steps`) asking the user to continue.
+`maxOutputTokens` caps each model step's output (the provider's default when omitted). `maxToolCalls` caps the tool calls in one answer (unlimited when omitted): once they are spent, and always on the last step, the model is asked to answer from what it has, with tools disabled (`FINAL_STEP_INSTRUCTION` is added to the system prompt for that step). An answer that ends unfinished is never silent: when the last step stops at the output limit, or the step limit ends the loop while tools are still being called, the chat shows a notice through `error` (`INCOMPLETE_MESSAGES.length` or `.steps`) asking the user to continue.
 
 MCP uses Streamable HTTP. Tool discovery happens at the start of each turn. Tools are namespaced as `serverId__toolName`; the browser executes the AI SDK tool loop, feeds results back to the model, and closes MCP clients after the turn. Stop cancels model requests and MCP fetches. MCP requests have a 60-second timeout. The loop is capped (default eight steps; component accepts 1–30).
 
