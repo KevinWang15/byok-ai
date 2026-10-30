@@ -123,7 +123,8 @@ export function createBrowserAdapter(options: {
         // Models sometimes stop with nothing but whitespace. Ask once more, without tools,
         // with everything this run did so far.
         if (finish === 'stop' && !answered()) {
-          const { messages: done } = await result.response
+          // Each step's messages hold only that step; the empty last one is left out.
+          const done = (await result.steps).slice(0, -1).flatMap(step => step.response.messages)
           finish = yield* pump(streamText({
             model, system: finalInstructions, messages: [...history, ...done, { role: 'user', content: FINAL_STEP_INSTRUCTION }],
             tools, toolChoice: 'none', abortSignal, maxRetries: 0, onError: () => {},
