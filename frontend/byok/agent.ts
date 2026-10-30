@@ -32,6 +32,12 @@ export const FINAL_STEP_INSTRUCTION = 'No more tool calls are available for this
 export const INCOMPLETE_MESSAGES = {
   length: 'The answer stopped at the model\'s output limit. Ask it to continue.',
   steps: 'The assistant used all its steps before finishing. Ask it to continue, or narrow the question.',
+  empty: 'The model finished without writing an answer. Try again.',
+}
+
+function lastToolCall(content: ThreadAssistantMessagePart[]) {
+  for (let i = content.length - 1; i >= 0; i--) if (content[i].type === 'tool-call') return i
+  return -1
 }
 
 export function createBrowserAdapter(options: {
@@ -86,6 +92,8 @@ export function createBrowserAdapter(options: {
           if (event.type === 'finish') {
             if (event.finishReason === 'length') options.onError(INCOMPLETE_MESSAGES.length)
             else if (event.finishReason === 'tool-calls') options.onError(INCOMPLETE_MESSAGES.steps)
+            // Text written before the last tool call is not the answer.
+            else if (!content.slice(lastToolCall(content) + 1).some(p => p.type === 'text' && p.text.trim())) options.onError(INCOMPLETE_MESSAGES.empty)
           }
           if (event.type === 'text-delta') {
             const last = content.at(-1)

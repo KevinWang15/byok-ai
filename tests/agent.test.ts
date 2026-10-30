@@ -56,6 +56,12 @@ test('an answer cut off by the output limit, or out of steps, says so; maxOutput
   assert.equal(cut.model.doStreamCalls[0].maxOutputTokens, 1234)
   const steps = await run('tool-calls', 1)
   assert.equal(steps.errors.at(-1), INCOMPLETE_MESSAGES.steps)
+  const silent = new MockLanguageModelV4({ doStream: async () => stream([{ type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }]) })
+  const errors: string[] = []
+  const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => silent },
+    values: {}, servers: [], systemPrompt: '', maxSteps: 2, onError: e => errors.push(e) })
+  for await (const _ of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ }
+  assert.equal(errors.at(-1), INCOMPLETE_MESSAGES.empty)
 })
 test('after the tool budget, and on the last step, the model answers without tools', async () => {
   const toolStep = (id: string) => stream([{ type: 'tool-call', toolCallId: id, toolName: 'missing_tool', input: '{}' },
