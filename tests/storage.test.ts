@@ -1,6 +1,9 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { defaultConnectionKey, isEmptyConversation, loadConnection, loadState, migrateConnection, newConversation, sameConnection, saveConnection, saveState, subscribeConnection, type StoredState } from '../frontend/byok/storage'
+import {
+  isEmptyConversation, loadConnection, loadConversations, newConversation, sameConnection, saveConnection, saveConversations,
+  subscribeConnection, type StoredConversations,
+} from '../frontend/byok/storage'
 
 let items: Map<string, string>
 const windowListeners = new Map<string, Set<(event: { key: string | null }) => void>>()
@@ -13,63 +16,58 @@ beforeEach(() => {
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
     getItem: (key: string) => items.get(key) ?? null,
     setItem: (key: string, value: string) => items.set(key, value),
+    removeItem: (key: string) => items.delete(key),
   } })
 })
-test('restores provider credentials and custom form values within their namespace', () => {
-  const state: StoredState = { version: 2, conversations: [], connection: {
-    providerId: 'company', values: { apiKey: 'test-key', model: 'model', baseURL: 'https://example.test/v1', organization: 'team' },
-  } }
-  assert.equal(saveState('one', state), true)
-  assert.equal(loadState('one').error, false)
-  assert.deepEqual(loadState('one').data.connection, state.connection)
-  assert.equal(loadState('two').data.connection, undefined)
-  assert.ok(!items.get('one')?.includes('createModel'))
-})
-test('reads legacy histories and repairs a response interrupted by reload', () => {
-  const date = new Date().toISOString()
-  items.set('legacy', JSON.stringify([{ id: 'chat', title: 'Question', updatedAt: 1, messages: [{
-    id: 'response', role: 'assistant', content: [{ type: 'text', text: 'Partial response' }],
-    createdAt: date, status: { type: 'running' },
-  }] }]))
-  const loaded = loadState('legacy')
+const at = new Date(Date.UTC(2026, 9, 30)).toISOString()
+const userMessage = { id: 'u', role: 'user', createdAt: at, content: [{ type: 'text', text: 'Question' }] }
+
+test('conversations and the open one round-trip through their key', () => {
+  const data = { conversations: [{ id: 'c', title: 'Question', updatedAt: 1, draft: 'Unsent', messages: [userMessage] }], activeConversationId: 'c' }
+  assert.equal(saveConversations('app', data as unknown as StoredConversations), true)
+  const loaded = loadConversations('app')
   assert.equal(loaded.error, false)
-  assert.equal(loaded.data.version, 2)
-  const message = loaded.data.conversations[0].messages[0]
-  assert.ok(message.createdAt instanceof Date)
+  assert.equal(loaded.data.activeConversationId, 'c')
+  assert.equal(loaded.data.conversations[0].draft, 'Unsent')
+  assert.ok(loaded.data.conversations[0].messages[0].createdAt instanceof Date)
+  assert.deepEqual(loadConversations('other'), { data: { conversations: [] }, error: false })
+})
+test('a response still running when the page closed comes back cancelled', () => {
+  items.set('app', JSON.stringify({ conversations: [{ id: 'c', title: 'Question', updatedAt: 1, draft: '', messages: [
+    userMessage, { id: 'a', role: 'assistant', createdAt: at, content: [{ type: 'text', text: 'Partial' }], status: { type: 'running' } },
+  ] }] }))
+  const message = loadConversations('app').data.conversations[0].messages[1]
+  assert.equal(message.role, 'assistant')
   if (message.role === 'assistant') assert.deepEqual(message.status, { type: 'incomplete', reason: 'cancelled' })
-  assert.equal(saveState('legacy', loaded.data), true)
-  assert.equal(JSON.parse(items.get('legacy')!).version, 2)
 })
-test('bad persisted JSON or credentials cannot crash initialization', () => {
-  items.set('bad', '{')
-  assert.equal(loadState('bad').error, true)
-  items.set('bad', JSON.stringify({ version: 2, connection: { providerId: 'x', values: { apiKey: 42 } }, conversations: [{ id: 'broken', title: 'Broken', messages: [null] }] }))
-  assert.equal(loadState('bad').data.connection, undefined)
-  assert.deepEqual(loadState('bad').data.conversations, [])
+test('records without the saved shape are skipped and the rest load', () => {
+  items.set('app', JSON.stringify({ conversations: [
+    { id: 'kept', title: 'Question', updatedAt: 1, draft: '', messages: [userMessage] },
+    { id: 'no-date', title: 'Question', draft: '', messages: [userMessage] },
+    { id: 'bad-message', title: 'Question', updatedAt: 1, draft: '', messages: [null] },
+    { id: 'bad-created', title: 'Question', updatedAt: 1, draft: '', messages: [{ ...userMessage, createdAt: 'later' }] },
+  ] }))
+  assert.deepEqual(loadConversations('app').data.conversations.map(c => c.id), ['kept'])
 })
-test('disconnect removes stored credentials without deleting histories or draft selection', () => {
-  const state: StoredState = { version: 2, connection: { providerId: 'x', values: { apiKey: 'secret' } },
-    conversations: [{ id: 'c', title: 'Draft', messages: [], updatedAt: 1, draft: 'Unsent text' }], activeConversationId: 'c' }
-  saveState('app', state)
-  saveState('app', { ...state, connection: undefined })
-  assert.ok(!items.get('app')!.includes('secret'))
-  assert.deepEqual(loadState('app').data.conversations, state.conversations)
-  assert.equal(loadState('app').data.activeConversationId, 'c')
-})
-test('denied storage and quota failures are surfaced without throwing', () => {
+test('unreadable storage is reported, never thrown', () => {
+  items.set('app', '{')
+  assert.equal(loadConversations('app').error, true)
+  items.set('app', JSON.stringify([]))
+  assert.equal(loadConversations('app').error, true)
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { throw new Error('Denied') } })
-  assert.equal(loadState('app').error, true)
-  assert.equal(saveState('app', { version: 2, conversations: [] }), false)
+  assert.equal(loadConversations('app').error, true)
+  assert.equal(saveConversations('app', { conversations: [] }), false)
+  assert.equal(saveConnection('app:connection', undefined), false)
 })
-test('a shared connection key holds the connection apart from any conversations', () => {
-  const connection = { providerId: 'x', values: { apiKey: 'secret' } }
-  saveState('shared', { version: 2, conversations: [{ id: 'c', title: 'Kept', messages: [], updatedAt: 1, draft: 'Unsent' }] })
-  assert.equal(saveConnection('shared', connection), true)
-  assert.deepEqual(loadConnection('shared'), connection)
-  assert.equal(loadState('shared').data.conversations.length, 1, 'conversations kept')
-  saveConnection('shared', undefined)
-  assert.equal(loadConnection('shared'), undefined)
-  assert.ok(!items.get('shared')!.includes('secret'))
+test('a connection is saved under its own key and removed on disconnect', () => {
+  const connection = { providerId: 'company', values: { apiKey: 'secret', baseURL: 'https://example.test/v1', organization: 'team' } }
+  assert.equal(saveConnection('app:connection', connection), true)
+  assert.deepEqual(loadConnection('app:connection'), connection)
+  assert.equal(loadConnection('other:connection'), undefined)
+  saveConnection('app:connection', undefined)
+  assert.equal(items.has('app:connection'), false)
+  items.set('app:connection', JSON.stringify({ providerId: 'x', values: { apiKey: 42 } }))
+  assert.equal(loadConnection('app:connection'), undefined)
 })
 test('assistants sharing a connection key hear its changes, from this tab and from others', () => {
   let heard = 0
@@ -78,16 +76,28 @@ test('assistants sharing a connection key hear its changes, from this tab and fr
   assert.equal(heard, 1)
   for (const listener of windowListeners.get('storage') ?? []) listener({ key: 'shared' })
   for (const listener of windowListeners.get('storage') ?? []) listener({ key: 'other' })
-  assert.equal(heard, 2, 'another tab wrote this key; other keys are ignored')
+  assert.equal(heard, 2, 'only writes to this key count')
   stop()
   saveConnection('shared', undefined)
-  assert.equal(heard, 2, 'unsubscribed')
+  assert.equal(heard, 2)
   assert.equal(windowListeners.get('storage')?.size, 0)
-  assert.equal(sameConnection({ providerId: 'x', values: { apiKey: 'k' } }, { providerId: 'x', values: { apiKey: 'k' } }), true)
-  assert.equal(sameConnection({ providerId: 'x', values: { apiKey: 'k' } }, { providerId: 'x', values: { apiKey: 'j' } }), false)
-  assert.equal(sameConnection(undefined, undefined), true)
 })
-test('new conversations get ids without crypto.randomUUID, which insecure origins lack', () => {
+test('connections are the same when provider and every value match', () => {
+  const a = { providerId: 'x', values: { apiKey: 'k' } }
+  assert.equal(sameConnection(a, { providerId: 'x', values: { apiKey: 'k' } }), true)
+  assert.equal(sameConnection(a, { providerId: 'x', values: { apiKey: 'j' } }), false)
+  assert.equal(sameConnection(a, { providerId: 'y', values: { apiKey: 'k' } }), false)
+  assert.equal(sameConnection(a, { providerId: 'x', values: { apiKey: 'k', model: 'm' } }), false)
+  assert.equal(sameConnection(undefined, undefined), true)
+  assert.equal(sameConnection(a, undefined), false)
+})
+test('a conversation counts once it has a message or a non-blank draft', () => {
+  assert.equal(isEmptyConversation(newConversation()), true)
+  assert.equal(isEmptyConversation({ messages: [], draft: '  ' }), true)
+  assert.equal(isEmptyConversation({ messages: [], draft: 'x' }), false)
+  assert.equal(isEmptyConversation({ messages: [userMessage as never], draft: '' }), false)
+})
+test('conversation ids are 32 hex digits, made without crypto.randomUUID', () => {
   const original = crypto.randomUUID
   Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: undefined })
   try {
@@ -95,36 +105,4 @@ test('new conversations get ids without crypto.randomUUID, which insecure origin
     assert.equal(ids.size, 100)
     for (const id of ids) assert.match(id, /^[0-9a-f]{32}$/)
   } finally { Object.defineProperty(crypto, 'randomUUID', { configurable: true, value: original }) }
-})
-test('a connection saved inside a namespace moves to its own key once, and a disconnect stays done', () => {
-  const connection = { providerId: 'x', values: { apiKey: 'old-key' } }
-  saveState('app', { version: 2, connection, conversations: [{ id: 'c', title: 'Kept', messages: [], updatedAt: 1, draft: 'Unsent' }], activeConversationId: 'c' })
-  const key = defaultConnectionKey('app')
-  migrateConnection('app', key)
-  assert.deepEqual(loadConnection(key), connection)
-  assert.equal(loadState('app').data.connection, undefined, 'the namespace no longer holds it')
-  assert.equal(loadState('app').data.conversations.length, 1)
-  assert.equal(loadState('app').data.activeConversationId, 'c')
-  // Disconnected afterwards: migrating again brings nothing back.
-  saveConnection(key, undefined)
-  migrateConnection('app', key)
-  assert.equal(loadConnection(key), undefined)
-  // A key that already has a connection keeps it.
-  saveConnection(key, { providerId: 'y', values: { apiKey: 'new-key' } })
-  saveState('app', { version: 2, connection, conversations: [] })
-  migrateConnection('app', key)
-  assert.equal(loadConnection(key)?.providerId, 'y')
-  assert.ok(!items.get('app')!.includes('old-key'))
-})
-test('empty conversations are never kept: ones saved before are dropped on load', () => {
-  const message = { id: 'm', role: 'user', createdAt: new Date().toISOString(), content: [{ type: 'text', text: 'Hi' }] }
-  saveState('app', { version: 2, conversations: [
-    { id: 'empty', title: 'New conversation', messages: [], updatedAt: 3, draft: '' },
-    { id: 'draft', title: 'New conversation', messages: [], updatedAt: 2, draft: 'Unsent' },
-    { id: 'real', title: 'Hi', messages: [message as never], updatedAt: 1 },
-  ] })
-  assert.deepEqual(loadState('app').data.conversations.map(c => c.id), ['draft', 'real'])
-  assert.equal(isEmptyConversation(newConversation()), true)
-  assert.equal(isEmptyConversation({ messages: [], draft: '  ' }), true)
-  assert.equal(isEmptyConversation({ messages: [], draft: 'x' }), false)
 })

@@ -1,13 +1,6 @@
 import type { Conversation } from './storage'
 
-/** Missing legacy dates remain unknown instead of appearing as January 1970. */
-export function conversationDate(timestamp: number): Date | undefined {
-  const date = new Date(timestamp)
-  return timestamp > 0 && Number.isFinite(date.getTime()) ? date : undefined
-}
-
 export function relativeConversationTime(timestamp: number, now: number): string {
-  if (!conversationDate(timestamp)) return 'Unknown date'
   const seconds = Math.max(0, (now - timestamp) / 1000)
   if (seconds < 60) return 'Just now'
   const relative = new Intl.RelativeTimeFormat('en', { numeric: 'always' })
@@ -20,7 +13,7 @@ export function relativeConversationTime(timestamp: number, now: number): string
 }
 
 export function conversationPreview(conversation: Conversation): string {
-  if (conversation.draft?.trim()) return 'Draft: ' + conversation.draft.trim()
+  if (conversation.draft.trim()) return 'Draft: ' + conversation.draft.trim()
   for (const message of [...conversation.messages].reverse()) {
     const text = message.content.flatMap(part => part.type === 'text' ? [part.text] : []).join(' ').trim()
     if (text) return text.replace(/\s+/g, ' ').slice(0, 180)
