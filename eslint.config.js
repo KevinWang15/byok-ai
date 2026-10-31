@@ -6,7 +6,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  globalIgnores(['dist', 'test-results', 'playwright-report']),
   js.configs.recommended,
   tseslint.configs.recommended,
   {
@@ -15,7 +15,7 @@ export default defineConfig([
     linterOptions: { reportUnusedDisableDirectives: 'error' },
   },
   {
-    files: ['*.{js,ts}', 'backend/**/*.ts', 'tests/**/*.ts', 'scripts/**/*.mjs'],
+    files: ['*.{js,ts}', 'backend/**/*.ts', 'tests/**/*.ts', 'e2e/**/*.ts', 'scripts/**/*.mjs'],
     languageOptions: { globals: globals.node },
   },
   {

@@ -8,12 +8,6 @@ export default defineConfig({
   build: { outDir: 'dist/client' },
   server: {
     host: process.env.VITE_HOST ?? '127.0.0.1',
-    proxy: {
-      '/api': { target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000', changeOrigin: false },
-      '/health': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000',
-    },
-  },
-  resolve: {
-    tsconfigPaths: true,
+    proxy: { '/api': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000' },
   },
 })
