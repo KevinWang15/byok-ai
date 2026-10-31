@@ -22,7 +22,7 @@ export function createMcpServer() {
     const docs = [
       { title: 'Embedding', text: 'Import AskAI and render <AskAI /> in any React page. The components use unstyled Headless UI primitives. Supply your own styling and placement, or use AskAIProvider and useAskAI for a custom interface.' },
       { title: 'Providers', text: 'Pass providers with id, name, description, defaultValues, fields or a custom Form, validate, and createModel. Provider settings and API keys are saved in browser localStorage and restored on reload. Disconnect removes the saved key.' },
-      { title: 'MCP', text: 'Pass mcpServers with id, name, url and optional headers. Streamable HTTP servers expose tools. Tool execution and the model loop run in the browser.' },
+      { title: 'MCP', text: 'Pass mcpServers with id, name, url and optional headers. Streamable HTTP servers expose tools. The model loop runs in the browser and calls the servers\' tools.' },
       { title: 'Conversations', text: 'Conversations are saved in localStorage on this browser. No database is needed. Delete conversations from the history view.' },
     ]
     const words = query.toLowerCase().split(/\W+/).filter(Boolean)
@@ -39,7 +39,7 @@ export async function createApp(options: { frontendRoot?: string; logger?: boole
     // Same-origin by default. Configure explicit allowed origins when deploying cross-origin.
     const origin = request.headers.origin
     const allowed = (process.env.MCP_ALLOWED_ORIGINS ?? '').split(',').filter(Boolean)
-    if (origin && new URL(origin).host !== request.headers.host && !allowed.includes(origin)) {
+    if (origin && URL.parse(origin)?.host !== request.headers.host && !allowed.includes(origin)) {
       return reply.code(403).send({ error: 'Origin not allowed' })
     }
     const server = createMcpServer()

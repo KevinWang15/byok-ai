@@ -8,6 +8,7 @@ export default defineConfig({
   build: { outDir: 'dist/client' },
   server: {
     host: process.env.VITE_HOST ?? '127.0.0.1',
-    proxy: { '/api': process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000' },
+    // The page's Host is kept, so the MCP endpoint sees a same-origin request.
+    proxy: { '/api': { target: process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:3000', changeOrigin: false } },
   },
 })

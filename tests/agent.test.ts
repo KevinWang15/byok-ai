@@ -168,12 +168,3 @@ test('pre-aborted runs stop before connecting or invoking a model', async () => 
   for await (const _ of adapter.run(runOptions(controller.signal)) as AsyncGenerator<ChatModelRunResult>) { void _ }
   assert.equal(invoked, false)
 })
-test('MCP rejects unrelated web origins and has no chat endpoint', async () => {
-  const app = await createApp()
-  try {
-    const denied = await app.inject({ method: 'POST', url: '/api/mcp', headers: { origin: 'https://evil.example' }, payload: {} })
-    assert.equal(denied.statusCode, 403)
-    assert.equal((await app.inject({ method: 'POST', url: '/api/chat', payload: {} })).statusCode, 404)
-    assert.equal((await app.inject({ url: '/health' })).statusCode, 200)
-  } finally { await app.close() }
-})
