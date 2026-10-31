@@ -148,9 +148,8 @@ export function createBrowserAdapter(options: {
         else if (!answered()) options.onError(INCOMPLETE_MESSAGES.empty)
       } catch (error) {
         if (!abortSignal.aborted) {
-          // Do not surface raw provider errors: some include request headers or URLs with keys.
+          // Raw provider errors are neither shown nor attached: some carry request headers or URLs with keys.
           options.onError(isNetworkFailure(error) ? CONNECTION_LOST_MESSAGE : FAILURE_MESSAGE)
-          // The cause is left off on purpose: it can carry headers or URLs with keys.
           // eslint-disable-next-line preserve-caught-error
           throw new Error('Provider or MCP request failed.')
         }

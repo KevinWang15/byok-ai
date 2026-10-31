@@ -6,11 +6,8 @@ type Preferences = { size?: Size; position?: Position; maximized: boolean }
 /**
  * The edge or corner a handle resizes, by compass point: `n` top, `s` bottom, `e` right, `w` left.
  * The dragged edges follow the pointer; the opposite ones stay put, as with an OS window.
- * `width`, `height` and `both` are the left edge, the top edge and the top-left corner.
  */
 export type ResizeEdge = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'
-type Direction = ResizeEdge | 'width' | 'height' | 'both'
-const EDGES: Record<Direction, ResizeEdge> = { n: 'n', s: 's', e: 'e', w: 'w', ne: 'ne', nw: 'nw', se: 'se', sw: 'sw', width: 'w', height: 'n', both: 'nw' }
 type Rect = { left: number; top: number; right: number; bottom: number }
 export interface PanelLayoutOptions {
   /** localStorage key for the size, position and maximized state. */
@@ -41,7 +38,7 @@ function loadPreferences(key: string): Preferences {
  * edge or corner, and maximize. Mouse, touch and arrow keys (Shift for larger
  * steps); Escape cancels a move. Saved to localStorage. Spread `panelProps` on the
  * panel (it marks it with `data-byok-panel`, which the header and handles inside it
- * measure), `headerProps` and `handleProps(direction)`, and apply `style`:
+ * measure), `headerProps` and `handleProps(edge)`, and apply `style`:
  * `--byok-panel-width/height` (px) once resized, `--byok-panel-x/y` (0–1 of the
  * free space) once moved. Placement and sizing CSS belong to the consumer.
  */
@@ -91,9 +88,7 @@ export function usePanelLayout({ storageKey, margin = defaultMargin, minSize = 3
     setMoving(false)
   }
   const rectOf = (from: Element): Rect => { const b = bounds(from); return { left: b.left, top: b.top, right: b.right, bottom: b.bottom } }
-  const handleProps = (direction: Direction) => {
-    const edge = EDGES[direction]
-    return {
+  const handleProps = (edge: ResizeEdge) => ({
     'data-byok-resize': edge,
     onPointerDown(event: PointerEvent<HTMLElement>) {
       if (event.button !== 0 || !event.isPrimary) return
@@ -124,8 +119,7 @@ export function usePanelLayout({ storageKey, margin = defaultMargin, minSize = 3
       resize(rectOf(event.currentTarget), edge,
         horizontal ? (event.key === 'ArrowLeft' ? -step : step) : 0, vertical ? (event.key === 'ArrowUp' ? -step : step) : 0)
     },
-  }
-  }
+  })
   return {
     maximized: preferences.maximized,
     positioned: Boolean(preferences.position),

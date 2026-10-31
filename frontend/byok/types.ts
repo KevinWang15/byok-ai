@@ -34,6 +34,7 @@ export interface AskAIOptions {
    */
   clientTools?: ToolSet
   systemPrompt?: string
+  /** Where conversations and the open one are saved. Default `byok-ai:conversations`. */
   storageKey?: string
   /**
    * Where the provider connection is saved: `${storageKey}:connection` when omitted, and never
@@ -43,6 +44,7 @@ export interface AskAIOptions {
    */
   connectionKey?: string
   title?: string
+  /** Model steps per answer, each a model call that may call tools. Default 8. */
   maxSteps?: number
   /** Output token limit per model step; the provider's default when omitted. */
   maxOutputTokens?: number

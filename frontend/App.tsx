@@ -3,7 +3,6 @@ import { MessagePrimitive, ThreadPrimitive } from '@assistant-ui/react'
 import { AskAIProvider, MarkdownText, useAskAI } from './byok'
 
 import { DemoAssistant } from './demo/DemoAssistant'
-import { DemoOrb } from './demo/DemoOrb'
 import { DemoIcon } from './demo/DemoIcon'
 
 const servers = [{ id: 'workspace', name: 'Workspace tools', url: '/api/mcp' }]
@@ -59,8 +58,8 @@ function SharedConnectionExample() {
     <span className="demo-eyebrow">SHARED CONNECTION</span><h2>One key for every assistant.</h2>
     <p>These two assistants keep separate conversations under their own <code>storageKey</code> and share one provider connection through <code>connectionKey</code>. Connect or disconnect in either one.</p>
     <div className="demo-shared">
-      <AskAIProvider storageKey="byok-ai:shared-demo:first:v1" connectionKey="byok-ai:shared-demo:connection:v1"><SharedConnectionStatus name="First assistant" /></AskAIProvider>
-      <AskAIProvider storageKey="byok-ai:shared-demo:second:v1" connectionKey="byok-ai:shared-demo:connection:v1"><SharedConnectionStatus name="Second assistant" /></AskAIProvider>
+      <AskAIProvider storageKey="byok-ai:shared-demo:first" connectionKey="byok-ai:shared-demo:connection"><SharedConnectionStatus name="First assistant" /></AskAIProvider>
+      <AskAIProvider storageKey="byok-ai:shared-demo:second" connectionKey="byok-ai:shared-demo:connection"><SharedConnectionStatus name="Second assistant" /></AskAIProvider>
     </div>
   </section>
 }
@@ -85,12 +84,13 @@ function DemoContent() {
   const { setOpen, connection } = useAskAI()
   const [copied, setCopied] = useState(false)
   const [copyError, setCopyError] = useState(false)
-  const snippet = `import { AskAIProvider } from 'byok-ai'
-import { DemoAssistant } from './demo/DemoAssistant'
+  const snippet = `import { AskAI } from 'byok-ai'
 
-<AskAIProvider mcpServers={servers}>
-  <DemoAssistant />
-</AskAIProvider>`
+const servers = [{ id: 'workspace', name: 'Workspace tools', url: '/api/mcp' }]
+
+export function YourPage() {
+  return <AskAI mcpServers={servers} />
+}`
   return <div className="demo">
     <header className="demo-nav">
       <a className="demo-logo" href="#" aria-label="BYOK AI home"><span><DemoIcon name="sparkle" size={22} /></span>byok<span className="demo-logo-suffix">/ ai</span></a>
@@ -110,7 +110,7 @@ import { DemoAssistant } from './demo/DemoAssistant'
           <div className="demo-preview-glow" />
           <div className="demo-preview">
             <div className="demo-preview-top"><span><DemoIcon name="sparkle" size={16} /> Ask AI</span><DemoIcon name="more" size={16} /></div>
-            <div className="demo-orb-scene" aria-hidden="true"><div className="demo-orb-halo"><DemoOrb displaySize={128} decorative /></div><div className="demo-orb-shadow" /></div>
+            <div className="demo-preview-scene"><div className="demo-preview-mark"><DemoIcon name="sparkle" size={56} /></div></div>
             <div className="demo-preview-copy"><span className="demo-eyebrow">ASSISTANT PREVIEW</span><h2>Chat with your model.</h2><p>Connect a provider, then search the docs<br />using this demo’s MCP tools.</p></div>
             <button className="demo-preview-input" onClick={() => setOpen(true)}><span>Open chat</span><span className="demo-preview-send"><DemoIcon name="arrow" /></span></button>
             <span className="demo-preview-foot">{connection ? `Connected to ${connection.provider.name}` : 'Provider setup required'}</span>
@@ -124,10 +124,10 @@ import { DemoAssistant } from './demo/DemoAssistant'
         <article><span className="demo-feature-number">03</span><div><h2>Resume saved conversations.</h2><p>Provider settings, API keys, conversation history, and drafts are stored in localStorage.</p></div></article>
       </section>
       <section className="demo-integration" id="integration">
-        <div className="demo-integration-copy"><span className="demo-eyebrow">UNSTYLED CORE · COMPOSABLE UI</span><h2>Style and compose<br />the chat interface.</h2><p>Reuse provider setup, chat, history, and tool rendering, or supply your own components. The core ships without CSS.</p><a href="#sandbox">Try the headless example <DemoIcon name="arrow" /></a></div>
+        <div><span className="demo-eyebrow">UNSTYLED CORE · COMPOSABLE UI</span><h2>Style and compose<br />the chat interface.</h2><p>Reuse provider setup, chat, history, and tool rendering, or supply your own components. The core ships without CSS.</p><a href="#sandbox">Try the headless example <DemoIcon name="arrow" /></a></div>
         <div className="demo-code"><div className="demo-code-header"><span><span className="demo-code-dot" /> YourPage.tsx</span><button onClick={async () => { try { await navigator.clipboard.writeText(snippet); setCopied(true); setCopyError(false) } catch { setCopyError(true) } }}>{copied ? 'Copied ✓' : 'Copy code'}</button></div><pre><code>{snippet}</code></pre>{copyError && <p role="status">Select the code above to copy it.</p>}<div className="demo-code-foot">React · assistant-ui · Vercel AI SDK · Headless UI</div></div>
       </section>
-      <AskAIProvider mcpServers={servers} storageKey="byok-ai:headless-demo:v1"><HeadlessExample /></AskAIProvider>
+      <AskAIProvider mcpServers={servers} storageKey="byok-ai:headless-demo"><HeadlessExample /></AskAIProvider>
       <SharedConnectionExample />
     </main>
     <footer className="demo-footer"><a className="demo-logo" href="#"><DemoIcon name="sparkle" size={16} /> byok / ai</a><span>React component library</span><span>Browser-side agent · MCP backend</span></footer>

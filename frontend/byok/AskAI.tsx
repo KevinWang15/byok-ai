@@ -8,8 +8,9 @@ import { AskAIHistory } from './AskAIHistory'
 import { MessageRenderingContext } from './rendering-context'
 import type { AskAIChatProps, AskAIProps, ProviderPreset, ProviderValues } from './types'
 
-const Tool: ToolCallMessagePartComponent = ({ toolName, result, argsText, isError }) => (
-  <Disclosure as="div" data-byok="tool"><DisclosureButton>{toolName}: {result === undefined ? 'Running…' : isError ? 'Failed' : 'Done'}</DisclosureButton><DisclosurePanel>
+const TOOL_STATUS = { running: 'Running…', 'requires-action': 'Running…', incomplete: 'Stopped', complete: 'Done' } as const
+const Tool: ToolCallMessagePartComponent = ({ toolName, result, argsText, isError, status }) => (
+  <Disclosure as="div" data-byok="tool"><DisclosureButton>{toolName}: {isError ? 'Failed' : TOOL_STATUS[status.type]}</DisclosureButton><DisclosurePanel>
     <pre>{argsText}</pre>{result !== undefined && <pre>{JSON.stringify(result, null, 2)}</pre>}
   </DisclosurePanel></Disclosure>
 )
