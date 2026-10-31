@@ -50,7 +50,7 @@
     "@headlessui/react": "^2.2.10",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@playwright/test": "^1.64.1",
-    "@types/node": "^24.13.4",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react-swc": "^4.3.3",
