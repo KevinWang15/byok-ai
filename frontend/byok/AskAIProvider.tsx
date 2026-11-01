@@ -4,7 +4,7 @@ import type { ToolSet } from 'ai'
 import { AskAIContext, type AskAIContextValue, type AskAIPage, type ProviderConnection } from './context'
 import { defaultProviders } from './providers'
 import { createBrowserAdapter } from './agent'
-import { opfsConversationFiles, type ConversationFiles } from './conversation-files'
+import { browserFilesAvailable, opfsConversationFiles, type ConversationFiles } from './conversation-files'
 import { imageAttachmentAdapter } from './images'
 import { workerScriptRunner } from './script-runner'
 import {
@@ -138,7 +138,11 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
   // What conversations keep besides their messages: workspace files and images. Opening it costs
   // nothing; storage is touched only when something is read or written.
   const files = useMemo(() => opfsConversationFiles(storageKey), [storageKey])
-  const openWorkspace = useMemo(() => workspace ? files.workspace(activeId) : undefined, [workspace, files, activeId])
+  // Both need somewhere to keep files; without it they are not offered at all.
+  const [canKeepFiles] = useState(browserFilesAvailable)
+  const workspaceOn = workspace && canKeepFiles
+  const imagesOn = images && canKeepFiles
+  const openWorkspace = useMemo(() => workspaceOn ? files.workspace(activeId) : undefined, [workspaceOn, files, activeId])
   const loadImage = useCallback((id: string) => files.images(activeId).load(id), [files, activeId])
 
   const [open, setOpen] = useState(false)
@@ -189,7 +193,7 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
       files.remove(id).catch(() => setStorageError(true))
     },
   }
-  return <Runtime state={state} clientTools={clientTools} files={files} workspace={workspace} images={images} systemPrompt={systemPrompt}
+  return <Runtime state={state} clientTools={clientTools} files={files} workspace={workspaceOn} images={imagesOn} systemPrompt={systemPrompt}
     maxSteps={maxSteps} maxOutputTokens={maxOutputTokens} maxToolCalls={maxToolCalls} save={save} onBusy={setBusy}>
     {children}
   </Runtime>

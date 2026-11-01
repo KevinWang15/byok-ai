@@ -143,6 +143,8 @@ Scripts run in QuickJS, a separate JavaScript engine compiled to WebAssembly, in
 
 The tools are named `workspace__…`, so with `workspace` on, no MCP server may have the id `workspace`.
 
+Browsers offer OPFS only in secure contexts: HTTPS, or `localhost`. On a page served over plain HTTP from another host, `workspace` and `images` have no effect: no workspace tools, no attach button. `browserFilesAvailable()` says which applies, so a system prompt can mention the workspace only when it is there.
+
 ## Images
 
 With `images`, and a provider whose preset `acceptsImages`, the user can attach images to a message: with the attach button, by pasting into the message box, or by dropping them on the composer. A message holds up to 4 (`IMAGE_LIMITS`), of up to 20 MB each. Each is prepared when it is added: an image whose longer edge is over 1,568 px, or that is not PNG, JPEG or WebP, is scaled and encoded as PNG (PNG sources) or JPEG. A file the browser can't read, or one too many, is refused with a message where answer errors show.

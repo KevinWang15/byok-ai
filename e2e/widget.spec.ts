@@ -793,3 +793,22 @@ test('at most four images go in a message, and an image that cannot be read says
   await expect(page.locator('[data-byok="composer-images"] [data-byok="image"]')).toHaveCount(4)
   await expect(page.getByRole('alert')).toContainText('at most 4 images')
 })
+
+test('without private file storage (plain HTTP), there is no workspace and no attaching', async ({ page }) => {
+  // What a secure context provides and plain HTTP doesn't.
+  await page.addInitScript(() => Object.defineProperty(navigator, 'storage', { configurable: true, value: undefined }))
+  let tools: string[] = []
+  await page.route(MODEL, route => {
+    tools = ((route.request().postDataJSON().tools ?? []) as { function: { name: string } }[]).map(t => t.function.name)
+    return route.fulfill(answer('Hello.'))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  await expect(page.getByRole('button', { name: 'Attach image' })).toHaveCount(0)
+  await messageBox(page).fill('Hi')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('Hello.', { exact: true })).toBeVisible()
+  expect(tools.length).toBeGreaterThan(0)
+  expect(tools.filter(name => name.startsWith('workspace__'))).toEqual([])
+})

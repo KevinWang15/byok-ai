@@ -99,7 +99,13 @@ export function memoryConversationFiles(): ConversationFiles {
 // ------------------------------------------------------------------------------------------------
 // The origin private file system: <root>/byok-ai/<storage key>/<conversation id>/{files,images}/<name>.
 
-const STORAGE_UNAVAILABLE = 'This browser does not offer private file storage here (private windows may not), so files and images cannot be kept.'
+const STORAGE_UNAVAILABLE = 'This browser does not offer private file storage here, so files and images cannot be kept.'
+
+/**
+ * Whether this page can keep files: browsers offer OPFS only in secure contexts (HTTPS, or
+ * localhost), so a site served over plain HTTP has no workspace and no image attaching.
+ */
+export const browserFilesAvailable = () => typeof navigator !== 'undefined' && typeof navigator.storage?.getDirectory === 'function'
 const NO_SPACE = 'The browser has no more storage for this site.'
 
 // A storage key or conversation id as one directory name: anything but letters, digits, "-" and "_" escaped.

@@ -40,13 +40,15 @@ export interface AskAIOptions {
    * file system (OPFS), and JavaScript it can run over them in a sandbox (QuickJS in a worker, with
    * no network or page access) for calculation and analysis. The tools are named `workspace__…`, so
    * no MCP server may use the id "workspace". Deleting a conversation deletes its files. Default false.
+   * Browsers offer OPFS only in secure contexts (HTTPS, or localhost): elsewhere this has no effect
+   * (`browserFilesAvailable()` says which, for a prompt that mentions the tools).
    */
   workspace?: boolean
   /**
    * Lets the user attach images to a message (button, paste or drop) when the connected provider
    * `acceptsImages`. Images are scaled to what models read and kept with the conversation in the
    * browser's private file system (OPFS), not in localStorage; each later turn sends them again.
-   * Deleting a conversation deletes them. Default false.
+   * Deleting a conversation deletes them. Default false. Like `workspace`, only in secure contexts.
    */
   images?: boolean
   systemPrompt?: string
