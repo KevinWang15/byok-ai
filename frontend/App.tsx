@@ -5,7 +5,7 @@ import { AskAIProvider, MarkdownText, useAskAI } from './byok'
 import { DemoAssistant } from './demo/DemoAssistant'
 import { DemoIcon } from './demo/DemoIcon'
 
-const servers = [{ id: 'workspace', name: 'Workspace tools', url: '/api/mcp' }]
+const servers = [{ id: 'docs', name: 'Docs and time', url: '/api/mcp' }]
 
 function HeadlessExample() {
   const { connection, providers, connect, disconnect, runtime, busy, error } = useAskAI()
@@ -86,7 +86,7 @@ function DemoContent() {
   const [copyError, setCopyError] = useState(false)
   const snippet = `import { AskAI } from 'byok-ai'
 
-const servers = [{ id: 'workspace', name: 'Workspace tools', url: '/api/mcp' }]
+const servers = [{ id: 'docs', name: 'Docs and time', url: '/api/mcp' }]
 
 export function YourPage() {
   return <AskAI mcpServers={servers} />
@@ -135,5 +135,5 @@ export function YourPage() {
   </div>
 }
 export default function App() {
-  return <AskAIProvider mcpServers={servers}><DemoContent /></AskAIProvider>
+  return <AskAIProvider mcpServers={servers} workspace><DemoContent /></AskAIProvider>
 }

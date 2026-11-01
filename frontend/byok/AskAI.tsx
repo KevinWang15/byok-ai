@@ -1,4 +1,4 @@
-import { useContext, useId, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { useContext, useEffect, useId, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 import { ActionBarPrimitive, ThreadPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState, type ToolCallMessagePartComponent } from '@assistant-ui/react'
 import { Button, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Input, Label, Legend } from '@headlessui/react'
 import { AskAIProvider } from './AskAIProvider'
@@ -7,6 +7,7 @@ import { MarkdownText } from './MarkdownText'
 import { AskAIHistory } from './AskAIHistory'
 import { MessageRenderingContext } from './rendering-context'
 import type { AskAIChatProps, AskAIProps, ProviderPreset, ProviderValues } from './types'
+import type { Workspace, WorkspaceFile } from './workspace'
 
 const TOOL_STATUS = { running: 'Running…', 'requires-action': 'Running…', incomplete: 'Stopped', complete: 'Done' } as const
 const Tool: ToolCallMessagePartComponent = ({ toolName, result, argsText, isError, status }) => (
@@ -111,13 +112,30 @@ export function AskAISetup() {
 export { AskAIHistory }
 
 export function AskAITools() {
-  const { mcpServers, clientTools } = useAskAI()
+  const { mcpServers, clientTools, workspace } = useAskAI()
   return <section data-byok="tools"><h2>MCP servers</h2>
     <ul>{mcpServers.map(server => <li key={server.id}>{server.name} <code>{server.url}</code></li>)}</ul>
     {!mcpServers.length && <p>No MCP servers configured.</p>}
     {clientTools.length > 0 && <><h2>Page tools</h2>
       <ul>{clientTools.map(name => <li key={name}><code>{name}</code></li>)}</ul></>}
+    {workspace && <WorkspaceFiles workspace={workspace} />}
   </section>
+}
+
+const formatBytes = (bytes: number) => bytes < 1024 ? `${bytes} B` : bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(1)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+// The open conversation's files, as they are when the page opens.
+function WorkspaceFiles({ workspace }: { workspace: Workspace }) {
+  const [files, setFiles] = useState<WorkspaceFile[] | string>()
+  useEffect(() => {
+    let current = true
+    workspace.list().then(list => { if (current) setFiles(list) }, (error: unknown) => { if (current) setFiles(error instanceof Error ? error.message : 'The workspace could not be read.') })
+    return () => { current = false }
+  }, [workspace])
+  return <><h2>Workspace</h2>
+    <p>Files the assistant keeps with this conversation, in this browser only, and computes over in a sandbox.</p>
+    {typeof files === 'string' ? <p role="alert">{files}</p>
+      : files && (files.length ? <ul>{files.map(file => <li key={file.name}><code>{file.name}</code> {formatBytes(file.size)}</li>)}</ul> : <p>No files yet.</p>)}
+  </>
 }
 
 /** Native button props, including className, style, children, and event handlers. */
@@ -156,7 +174,7 @@ export function AskAIWidget({ components }: AskAIChatProps = {}) {
         <nav aria-label="Conversation">
           <Button type="button" disabled={busy} onClick={newConversation}>New chat</Button>
           <Button type="button" disabled={busy} onClick={() => setPage('chat')}>Chat</Button>
-          <Button type="button" disabled={busy} onClick={() => setPage('tools')}>MCP servers</Button>
+          <Button type="button" disabled={busy} onClick={() => setPage('tools')}>Tools</Button>
           <Button type="button" disabled={busy} onClick={disconnect}>Disconnect provider</Button>
         </nav>
         <div hidden={page !== 'chat'}><AskAIChat components={components} /></div>

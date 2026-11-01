@@ -4,6 +4,8 @@ import type { ToolSet } from 'ai'
 import { AskAIContext, type AskAIContextValue, type AskAIPage, type ProviderConnection } from './context'
 import { defaultProviders } from './providers'
 import { createBrowserAdapter } from './agent'
+import { opfsWorkspaceStore, type WorkspaceStore } from './workspace'
+import { workerScriptRunner } from './script-runner'
 import {
   DEFAULT_STORAGE_KEY, defaultConnectionKey, isEmptyConversation, loadConnection, loadConversations, newConversation,
   sameConnection, saveConnection, saveConversations, subscribeConnection, type Conversation, type StoredConnection, type StoredConversations,
@@ -21,8 +23,8 @@ function connectionOf(providers: ProviderPreset[], saved: StoredConnection | und
 }
 
 type State = Omit<AskAIContextValue, 'runtime' | 'error'>
-function Runtime({ state, clientTools, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, save, onBusy, children }: {
-  state: State; clientTools: ToolSet; systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number
+function Runtime({ state, clientTools, workspaces, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, save, onBusy, children }: {
+  state: State; clientTools: ToolSet; workspaces?: WorkspaceStore; systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number
   save: (conversation: Conversation) => void; onBusy: (busy: boolean) => void; children: ReactNode
 }) {
   const [error, setError] = useState('')
@@ -32,20 +34,25 @@ function Runtime({ state, clientTools, systemPrompt, maxSteps, maxOutputTokens, 
   const toolsRef = useRef(clientTools)
   useLayoutEffect(() => { toolsRef.current = clientTools })
   const toolNames = Object.keys(clientTools).join('\n')
-  const adapter = useMemo((): ChatModelAdapter => {
-    if (!connection) return { async run() { throw new Error('Connect a provider before sending a message.') } }
-    // The ref is read when a run starts and when a tool runs, never while rendering.
-    return { run: options => createBrowserAdapter({
-      ...connection, servers: mcpServers, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, onError: setError,
-      clientTools: () => toolsRef.current,
-    }).run(options) }
-  // toolNames stands for the tools: their definitions are read through the ref.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection, mcpServers, toolNames, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls])
-  const runtime = useLocalRuntime(adapter, { initialMessages: activeConversation.messages })
-  // Opening a conversation loads it into the thread; saving the open one doesn't.
   const activeRef = useRef(activeConversation)
   useLayoutEffect(() => { activeRef.current = activeConversation })
+  const adapter = useMemo((): ChatModelAdapter => {
+    if (!connection) return { async run() { throw new Error('Connect a provider before sending a message.') } }
+    // The refs are read when a run starts and when a tool runs, never while rendering.
+    return { run: options => {
+      // A run belongs to the conversation it started in.
+      const conversationId = activeRef.current.id
+      return createBrowserAdapter({
+        ...connection, servers: mcpServers, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, onError: setError,
+        clientTools: () => toolsRef.current,
+        workspace: workspaces && { open: () => workspaces.open(conversationId), run: workerScriptRunner },
+      }).run(options)
+    } }
+  // toolNames stands for the tools: their definitions are read through the ref.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connection, mcpServers, toolNames, workspaces, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls])
+  const runtime = useLocalRuntime(adapter, { initialMessages: activeConversation.messages })
+  // Opening a conversation loads it into the thread; saving the open one doesn't.
   useEffect(() => {
     runtime.thread.reset(activeRef.current.messages)
     runtime.thread.composer.setText(activeRef.current.draft)
@@ -89,7 +96,7 @@ function Runtime({ state, clientTools, systemPrompt, maxSteps, maxOutputTokens, 
   </AssistantRuntimeProvider>
 }
 
-function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVERS, clientTools = NO_TOOLS, systemPrompt = DEFAULT_PROMPT,
+function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVERS, clientTools = NO_TOOLS, workspace = false, systemPrompt = DEFAULT_PROMPT,
   storageKey = DEFAULT_STORAGE_KEY, connectionKey = defaultConnectionKey(storageKey), title = 'Ask AI', maxSteps = 8, maxOutputTokens, maxToolCalls, children }: AskAIProviderProps) {
   if (connectionKey === storageKey) throw new Error('connectionKey must differ from storageKey.')
   // The saved conversations and which one is open. A new conversation is open but not listed (or
@@ -108,6 +115,8 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
   const activeId = store.activeConversationId!
   const blank = useMemo(() => newConversation(activeId), [activeId])
   const activeConversation = store.conversations.find(c => c.id === activeId) ?? blank
+  const workspaces = useMemo(() => workspace ? opfsWorkspaceStore(storageKey) : undefined, [workspace, storageKey])
+  const openWorkspace = useMemo(() => workspaces?.open(activeId), [workspaces, activeId])
 
   const [open, setOpen] = useState(false)
   const [page, updatePage] = useState<AskAIPage>('chat')
@@ -142,7 +151,7 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
     updatePage('chat')
   }
   const state: State = {
-    title, providers, mcpServers, clientTools: Object.keys(clientTools), open, setOpen, page, connection, connect,
+    title, providers, mcpServers, clientTools: Object.keys(clientTools), workspace: openWorkspace, open, setOpen, page, connection, connect,
     conversations: store.conversations, activeConversation, busy, storageError,
     setPage: next => { if (!busy) updatePage(next) },
     disconnect: () => { if (!busy) { persistConnection(undefined); setConnection(undefined); updatePage('settings') } },
@@ -153,9 +162,10 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
       const conversations = storeRef.current.conversations.filter(c => c.id !== id)
       const activeConversationId = storeRef.current.activeConversationId === id ? newConversation().id : storeRef.current.activeConversationId
       commit({ conversations, activeConversationId })
+      workspaces?.removeConversation(id).catch(() => setStorageError(true))
     },
   }
-  return <Runtime state={state} clientTools={clientTools} systemPrompt={systemPrompt}
+  return <Runtime state={state} clientTools={clientTools} workspaces={workspaces} systemPrompt={systemPrompt}
     maxSteps={maxSteps} maxOutputTokens={maxOutputTokens} maxToolCalls={maxToolCalls} save={save} onBusy={setBusy}>
     {children}
   </Runtime>

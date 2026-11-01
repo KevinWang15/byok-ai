@@ -27,7 +27,7 @@ const chunk = (delta: unknown, finish: string | null = null) => ({ id: 'test', o
 const stream = (...chunks: unknown[]) => ({ contentType: 'text/event-stream', body: chunks.map(c => 'data: ' + JSON.stringify(c) + '\n\n').join('') + 'data: [DONE]\n\n' })
 const answer = (value: string) => stream(chunk({ role: 'assistant', content: value }), chunk({}, 'stop'))
 const searchDocs = stream(
-  chunk({ role: 'assistant', tool_calls: [{ index: 0, id: 'call', type: 'function', function: { name: 'workspace__search_docs', arguments: '{"query":"providers"}' } }] }),
+  chunk({ role: 'assistant', tool_calls: [{ index: 0, id: 'call', type: 'function', function: { name: 'docs__search_docs', arguments: '{"query":"providers"}' } }] }),
   chunk({}, 'tool_calls'),
 )
 const MODEL = 'https://model.example/v1/chat/completions'
@@ -256,12 +256,12 @@ test('Markdown renders safely, in the default renderer and a custom one', async 
 
 test('a custom layout separates speakers and groups adjacent tool calls', async ({ page }) => {
   const tools = ['search_docs', 'search_docs', 'get_current_time'].map((name, i) => ({
-    type: 'tool-call', toolCallId: 't' + i, toolName: 'workspace__' + name, args: { query: 'providers' }, argsText: '{"query":"providers"}',
+    type: 'tool-call', toolCallId: 't' + i, toolName: 'docs__' + name, args: { query: 'providers' }, argsText: '{"query":"providers"}',
     result: { content: [{ type: 'text', text: 'Workspace documentation retrieved.' }] },
   }))
-  await seed(page, { activeConversationId: 'tools', conversations: [conversation('tools', 'Summarize the workspace', [
-    text('user', 'user', 'Summarize the workspace.'),
-    message('assistant', 'assistant', [{ type: 'text', text: 'I checked the documentation.' }, ...tools, { type: 'text', text: '### Your workspace, at a glance' }]),
+  await seed(page, { activeConversationId: 'tools', conversations: [conversation('tools', 'Summarize the docs', [
+    text('user', 'user', 'Summarize the docs.'),
+    message('assistant', 'assistant', [{ type: 'text', text: 'I checked the documentation.' }, ...tools, { type: 'text', text: '### The docs, at a glance' }]),
   ])] })
   await page.goto('/')
   await openChat(page)
@@ -271,7 +271,7 @@ test('a custom layout separates speakers and groups adjacent tool calls', async 
   const group = dialog.getByRole('button', { name: /Used connected tools/ })
   await expect(group).toHaveCount(1)
   await expect(group).toHaveAttribute('aria-expanded', 'false')
-  await expect(dialog.getByRole('heading', { name: 'Your workspace, at a glance' })).toBeVisible()
+  await expect(dialog.getByRole('heading', { name: 'The docs, at a glance' })).toBeVisible()
   await group.click()
   await expect(dialog.locator('.chat-tool-row')).toHaveCount(3)
   await dialog.locator('.chat-tool-row').first().click()
@@ -640,4 +640,75 @@ test('the launcher keeps its size and label when dragged against the right edge'
     expect(restored.width).toBeCloseTo(original.width, 0)
     expect(restored.height).toBeCloseTo(original.height, 0)
   }
+})
+
+test('the workspace keeps files in the browser, runs scripts over them in a worker, and goes with its conversation', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  const call = (id: string, name: string, args: unknown) => stream(
+    chunk({ role: 'assistant', tool_calls: [{ index: 0, id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] }),
+    chunk({}, 'tool_calls'),
+  )
+  // The model writes a file, computes over it, then answers with what the script returned.
+  const turns = [
+    call('w', 'workspace__write_file', { name: 'sales.json', text: JSON.stringify([{ amount: 12.5 }, { amount: 30 }, { amount: 7.5 }]) }),
+    call('r', 'workspace__run_javascript', { code: 'const rows = files.readJSON("sales.json"); files.write("total.txt", String(rows.reduce((s, r) => s + r.amount, 0))); return { rows: rows.length, fetch: typeof fetch }' }),
+  ]
+  await page.route(MODEL, route => {
+    const next = turns.shift()
+    if (next) return route.fulfill(next)
+    const messages = route.request().postDataJSON().messages as { role: string; content: string }[]
+    return route.fulfill(answer('Script said: ' + messages.filter(m => m.role === 'tool').at(-1)!.content))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  await messageBox(page).fill('Total my sales')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  // The first script also loads the engine (and, in dev, has it compiled).
+  await expect(page.getByText(/^Script said:/)).toContainText('"result":{"rows":3,"fetch":"undefined"}', { timeout: 20_000 })
+
+  const conversationId = await page.evaluate(() => JSON.parse(localStorage.getItem('byok-ai:conversations')!).activeConversationId as string)
+  const readFiles = () => page.evaluate(async id => {
+    try {
+      let dir = await navigator.storage.getDirectory()
+      for (const name of ['byok-ai', 'byok-ai%3aconversations', id]) dir = await dir.getDirectoryHandle(name)
+      const files: Record<string, string> = {}
+      for await (const handle of dir.values()) files[handle.name] = await (await (handle as FileSystemFileHandle).getFile()).text()
+      return files
+    } catch { return null }
+  }, conversationId)
+  await page.reload()
+  expect(await readFiles()).toEqual({ 'sales.json': '[{"amount":12.5},{"amount":30},{"amount":7.5}]', 'total.txt': '50' })
+
+  await openChat(page)
+  await page.getByRole('button', { name: 'Conversation history' }).click()
+  await page.getByRole('button', { name: 'Delete Total my sales', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Delete conversation?', exact: true }).getByRole('button', { name: 'Delete conversation', exact: true }).click()
+  await expect.poll(readFiles).toBeNull()
+  expect(errors).toEqual([])
+})
+
+test('Stop ends a script that never finishes', async ({ page }) => {
+  let requests = 0
+  await page.route(MODEL, route => {
+    requests++
+    return route.fulfill(stream(
+      chunk({ role: 'assistant', tool_calls: [{ index: 0, id: 'loop', type: 'function', function: { name: 'workspace__run_javascript', arguments: '{"code":"while (true) {}"}' } }] }),
+      chunk({}, 'tool_calls'),
+    ))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  await messageBox(page).fill('Spin')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Using connected tools/ })).toBeVisible({ timeout: 20_000 })
+  const workers = () => page.evaluate(() => performance.getEntriesByType('resource').filter(e => e.name.includes('sandbox-worker')).length)
+  await expect.poll(workers).toBeGreaterThan(0)
+  const stopped = Date.now()
+  await page.getByRole('button', { name: 'Stop response', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeVisible()
+  expect(Date.now() - stopped).toBeLessThan(3_000)
+  expect(requests).toBe(1)
 })

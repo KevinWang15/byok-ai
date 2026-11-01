@@ -14,7 +14,7 @@ npm run test:e2e     # Playwright, Chromium (npx playwright install chromium)
 npm run build:lib    # dist/lib/index.js with type declarations
 ```
 
-Open http://127.0.0.1:5173, click Ask AI, choose a provider and paste a key. The demo MCP server offers `search_docs` and `get_current_time`. If port 3000 is taken: `PORT=3019 API_PROXY_TARGET=http://127.0.0.1:3019 npm run dev`. `npm run build && npm start` serves the built page and `/api/mcp` from one origin. Tests use simulated providers and never call a real one.
+Open http://127.0.0.1:5173, click Ask AI, choose a provider and paste a key. The demo MCP server offers `search_docs` and `get_current_time`, and the demo assistant has the workspace on. If port 3000 is taken: `PORT=3019 API_PROXY_TARGET=http://127.0.0.1:3019 npm run dev`. `npm run build && npm start` serves the built page and `/api/mcp` from one origin. Tests use simulated providers and never call a real one.
 
 ## Embed
 
@@ -23,7 +23,7 @@ Build the library with `npm run build:lib` and install the package from a path o
 ```tsx
 import { AskAI } from 'byok-ai'
 
-const servers = [{ id: 'workspace', name: 'Workspace', url: '/api/mcp' }]
+const servers = [{ id: 'docs', name: 'Docs', url: '/api/mcp' }]
 
 export function Page() {
   return <AskAI mcpServers={servers} storageKey="my-app:assistant" />
@@ -35,7 +35,7 @@ export function Page() {
 ```ts
 import { mountAskAI } from 'byok-ai'
 
-const assistant = mountAskAI(document.getElementById('assistant')!, { mcpServers: [{ id: 'workspace', name: 'Workspace', url: '/api/mcp' }] })
+const assistant = mountAskAI(document.getElementById('assistant')!, { mcpServers: [{ id: 'docs', name: 'Docs', url: '/api/mcp' }] })
 assistant.unmount() // when the host removes it
 ```
 
@@ -48,6 +48,7 @@ assistant.unmount() // when the host removes it
 | `providers` | `defaultProviders` | Provider presets offered in setup. |
 | `mcpServers` | `[]` | MCP servers (`McpServerConfig`) whose tools the model may call. |
 | `clientTools` | `{}` | AI SDK `tool()` definitions that run in the page. |
+| `workspace` | `false` | Per-conversation files in the browser and sandboxed JavaScript over them (see Workspace). |
 | `systemPrompt` | a short built-in prompt | System prompt for every answer. |
 | `storageKey` | `byok-ai:conversations` | localStorage key for conversations and the open one. |
 | `connectionKey` | `${storageKey}:connection` | localStorage key for the provider connection. Must differ from `storageKey`. |
@@ -123,9 +124,27 @@ export function Editor() {
 
 On the last step, or once `maxToolCalls` is spent, tools are disabled and the model is told to answer from what it has. If the model stops without writing an answer, it is asked once more without tools. An unfinished answer is never silent: `error` (shown in the chat) says the answer stopped at the output limit, that the assistant used all its steps, or that the model finished without an answer. A failed request shows either "The connection was interrupted" or a general message to check key, model, CORS and MCP; raw provider errors are never shown, since some include keys.
 
+## Workspace
+
+With `workspace`, each conversation gets a few text files, and the model can run JavaScript over them for calculation and analysis. Large data stays out of the conversation: the model saves a tool's result straight to a file, computes over it, and reads back only the answer.
+
+| Tool | Does |
+| --- | --- |
+| `workspace__list_files` | Names and sizes. |
+| `workspace__read_file` | Up to 20,000 characters from an offset, with `nextOffset` when there is more. |
+| `workspace__write_file`, `workspace__delete_file` | Create, replace or delete a file. |
+| `workspace__save_tool_result` | Call another tool (MCP or page) and save its result to a file; returns the size and the first 600 characters. MCP results are saved as their structured content, or their text. |
+| `workspace__run_javascript` | Run code as an async function body with `files.list()`, `files.read(name)`, `files.readJSON(name)`, `files.write(name, textOrValue)`, `files.delete(name)` and `console.log`; returns what it `return`s (JSON, up to 20,000 characters) and the log. |
+
+Files live in the origin private file system (OPFS) under `byok-ai/<storageKey>/<conversation id>/`. They are kept across reloads, never uploaded, and deleted with their conversation. Names are flat (letters, digits, `.`, `-`, `_`). A file holds up to 8 MB, a conversation 200 files and 64 MB (`WORKSPACE_LIMITS`). The tools page lists the open conversation's files, and `useAskAI().workspace` reads them.
+
+Scripts run in QuickJS, a separate JavaScript engine compiled to WebAssembly, in a worker started for each run. They see only the files and `console`: no network, DOM, storage, timers or imports. A run is stopped after 10 seconds or at 256 MB of memory (`SCRIPT_LIMITS`), and Stop ends it at once. A script works on a copy, and its writes are saved only if it finishes without an error. The worker and the engine's `.wasm` are separate files your bundler emits (Vite does so by default). A Content-Security-Policy must allow them: `worker-src 'self'`, `connect-src 'self'` (the worker fetches the `.wasm`) and `script-src 'wasm-unsafe-eval'`.
+
+The tools are named `workspace__…`, so with `workspace` on, no MCP server may have the id `workspace`.
+
 ## Custom UI
 
-`AskAIProvider` holds state and the assistant-ui runtime and renders no DOM. Inside it, `useAskAI()` returns `title`, `providers`, `mcpServers`, `clientTools` (names), `open`/`setOpen`, `page`/`setPage` (`'chat' | 'settings' | 'history' | 'tools'`), `connection`, `connect(provider, values)` (returns an error string or `undefined`), `disconnect()`, `conversations`, `activeConversation`, `newConversation()`, `selectConversation(id)`, `deleteConversation(id)` (immediate; confirm first), `busy`, `error`, `storageError` and `runtime`. Send with `runtime.thread.append(text)` and stop with `runtime.thread.cancelRun()`. Changing provider, page or conversation is ignored while `busy`.
+`AskAIProvider` holds state and the assistant-ui runtime and renders no DOM. Inside it, `useAskAI()` returns `title`, `providers`, `mcpServers`, `clientTools` (names), `workspace` (the open conversation's files, when on), `open`/`setOpen`, `page`/`setPage` (`'chat' | 'settings' | 'history' | 'tools'`), `connection`, `connect(provider, values)` (returns an error string or `undefined`), `disconnect()`, `conversations`, `activeConversation`, `newConversation()`, `selectConversation(id)`, `deleteConversation(id)` (immediate; confirm first), `busy`, `error`, `storageError` and `runtime`. Send with `runtime.thread.append(text)` and stop with `runtime.thread.cancelRun()`. Changing provider, page or conversation is ignored while `busy`.
 
 Compose the parts you need: `AskAITrigger` and `AskAIPanel` (native button and div props), `AskAISetup`, `AskAIChat`, `AskAIHistory`, `AskAITools`, `AskAIMessageContent`, `AskAIMessageActions`, or `AskAIWidget` for the full default UI. `createBrowserAdapter` is the assistant-ui `ChatModelAdapter` behind the runtime, for hosts that build their own.
 
@@ -169,7 +188,7 @@ export function Window() {
 
 ## Persistence
 
-Everything is saved in the browser's localStorage:
+Everything except workspace files (see Workspace) is saved in the browser's localStorage:
 
 | Key | Holds |
 | --- | --- |
@@ -195,4 +214,4 @@ Assistants that pass the same `connectionKey` share one connection: connecting o
 - `frontend/byok/`: the library (`index.ts` lists the public API).
 - `frontend/App.tsx`, `frontend/demo/`, `frontend/style.css`: the demo page and its styles.
 - `backend/`: the demo MCP server (Fastify, `/api/mcp`, `/health`, static files).
-- `tests/`: unit tests (agent loop over a real MCP transport, storage, history, the demo backend's origin rule). `e2e/`: Playwright tests of the demo.
+- `tests/`: unit tests (agent loop over a real MCP transport, storage, history, the workspace and its sandbox, the demo backend's origin rule). `e2e/`: Playwright tests of the demo.

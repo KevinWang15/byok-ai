@@ -22,14 +22,14 @@ test('browser adapter discovers MCP tools, executes a call, and gives its result
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { href: url } } })
   try {
     const model = new MockLanguageModelV4({ doStream: [
-      stream([{ type: 'tool-call', toolCallId: 'call-1', toolName: 'workspace__get_current_time', input: '{"timezone":"UTC"}' },
+      stream([{ type: 'tool-call', toolCallId: 'call-1', toolName: 'docs__get_current_time', input: '{"timezone":"UTC"}' },
         { type: 'finish', finishReason: { unified: 'tool-calls', raw: undefined }, usage }]),
       stream([{ type: 'text-start', id: 't' }, { type: 'text-delta', id: 't', delta: 'The current time is available.' }, { type: 'text-end', id: 't' },
         { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }]),
     ] })
     const errors: string[] = []
     const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
-      values: {}, servers: [{ id: 'workspace', name: 'Workspace', url: url + '/api/mcp' }], systemPrompt: 'Help.', maxSteps: 3, onError: e => errors.push(e) })
+      values: {}, servers: [{ id: 'docs', name: 'Docs', url: url + '/api/mcp' }], systemPrompt: 'Help.', maxSteps: 3, onError: e => errors.push(e) })
     let last: ChatModelRunResult = {}
     for await (const part of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) last = part
     assert.equal(model.doStreamCalls.length, 2)
@@ -70,7 +70,7 @@ test('an answer that comes back empty is asked for once more, without tools, wit
   const app = await createApp()
   const url = await app.listen({ host: '127.0.0.1', port: 0 })
   Object.defineProperty(globalThis, 'window', { configurable: true, value: { location: { href: url } } })
-  const call = stream([{ type: 'tool-call', toolCallId: 'call-1', toolName: 'workspace__get_current_time', input: '{"timezone":"UTC"}' },
+  const call = stream([{ type: 'tool-call', toolCallId: 'call-1', toolName: 'docs__get_current_time', input: '{"timezone":"UTC"}' },
     { type: 'finish', finishReason: { unified: 'tool-calls', raw: undefined }, usage }])
   const blank = stream([{ type: 'text-start', id: 't' }, { type: 'text-delta', id: 't', delta: '\n\n' }, { type: 'text-end', id: 't' },
     { type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }])
@@ -80,7 +80,7 @@ test('an answer that comes back empty is asked for once more, without tools, wit
     const model = new MockLanguageModelV4({ doStream: [call, blank, answer] })
     const errors: string[] = []
     const adapter = createBrowserAdapter({ provider: { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model },
-      values: {}, servers: [{ id: 'workspace', name: 'Workspace', url: url + '/api/mcp' }], systemPrompt: 'Help.', maxSteps: 4, onError: e => errors.push(e) })
+      values: {}, servers: [{ id: 'docs', name: 'Docs', url: url + '/api/mcp' }], systemPrompt: 'Help.', maxSteps: 4, onError: e => errors.push(e) })
     let last: ChatModelRunResult = {}
     for await (const part of adapter.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) last = part
     assert.deepEqual(errors, [''])

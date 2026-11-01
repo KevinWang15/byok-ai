@@ -40,7 +40,9 @@
     "@ai-sdk/mcp": "^2.0.87",
     "@ai-sdk/openai": "^4.0.105",
     "@assistant-ui/react-markdown": "^0.14.24",
+    "@jitl/quickjs-wasmfile-release-sync": "0.32.0",
     "ai": "^7.0.157",
+    "quickjs-emscripten-core": "0.32.0",
     "remark-gfm": "^4.0.1"
   },
   "devDependencies": {

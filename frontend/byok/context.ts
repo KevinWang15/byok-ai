@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 import type { AssistantRuntime } from '@assistant-ui/react'
 import type { ProviderPreset, ProviderValues, AskAIOptions } from './types'
 import type { Conversation } from './storage'
+import type { Workspace } from './workspace'
 
 export type AskAIPage = 'chat' | 'settings' | 'history' | 'tools'
 export interface ProviderConnection { provider: ProviderPreset; values: ProviderValues }
@@ -11,6 +12,8 @@ export interface AskAIContextValue {
   mcpServers: NonNullable<AskAIOptions['mcpServers']>
   /** Names of the tools that run in the page. */
   clientTools: string[]
+  /** The open conversation's files, when the workspace is on. */
+  workspace?: Workspace
   open: boolean
   setOpen: (open: boolean) => void
   page: AskAIPage

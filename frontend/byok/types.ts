@@ -33,6 +33,13 @@ export interface AskAIOptions {
    * changes: every call runs the latest one. Adding or removing a name restarts the runtime.
    */
   clientTools?: ToolSet
+  /**
+   * Gives the assistant a workspace: files kept with each conversation in the browser's private
+   * file system (OPFS), and JavaScript it can run over them in a sandbox (QuickJS in a worker, with
+   * no network or page access) for calculation and analysis. The tools are named `workspace__…`, so
+   * no MCP server may use the id "workspace". Deleting a conversation deletes its files. Default false.
+   */
+  workspace?: boolean
   systemPrompt?: string
   /** Where conversations and the open one are saved. Default `byok-ai:conversations`. */
   storageKey?: string

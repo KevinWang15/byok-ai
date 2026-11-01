@@ -5,7 +5,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod'
 
 export function createMcpServer() {
-  const server = new McpServer({ name: 'byok-workspace', version: '1.0.0' })
+  const server = new McpServer({ name: 'byok-demo', version: '1.0.0' })
   server.registerTool('get_current_time', {
     description: 'Get the current time in an IANA timezone.',
     inputSchema: { timezone: z.string().default('UTC') },

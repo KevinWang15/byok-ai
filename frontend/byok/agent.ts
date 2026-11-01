@@ -2,6 +2,9 @@ import { streamText, stepCountIs, ToolChoiceViolationError, type ModelMessage, t
 import { createMCPClient, type MCPClient } from '@ai-sdk/mcp'
 import type { ChatModelAdapter, ThreadMessage, ThreadAssistantMessagePart } from '@assistant-ui/react'
 import type { McpServerConfig, ProviderPreset, ProviderValues } from './types'
+import type { Workspace } from './workspace'
+import type { ScriptRunner } from './script-runner'
+import { WORKSPACE_ID, workspaceTools } from './workspace-tools'
 
 /** Preserve interleaved calls/results, and repair calls interrupted before a result arrived. */
 export function toModelMessages(messages: readonly ThreadMessage[]): ModelMessage[] {
@@ -50,6 +53,8 @@ export function createBrowserAdapter(options: {
   provider: ProviderPreset; values: ProviderValues; servers: McpServerConfig[]
   // The page's tools, read when a run starts and again by each call, so a call runs the latest definition.
   clientTools?: () => ToolSet
+  // The open conversation's files and how scripts run over them: adds the workspace tools.
+  workspace?: { open: () => Workspace; run: ScriptRunner }
   systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number; onError: (message: string) => void
 }): ChatModelAdapter {
   return {
@@ -71,9 +76,11 @@ export function createBrowserAdapter(options: {
             return current(input as never, callOptions)
           } } as typeof tool
         }
+        const mcpTools = new Set<string>()
         for (const server of options.servers) {
           abortSignal.throwIfAborted()
           if (!/^[a-zA-Z0-9_-]+$/.test(server.id)) throw new Error('MCP IDs must contain only letters, numbers, underscores or hyphens.')
+          if (options.workspace && server.id === WORKSPACE_ID) throw new Error(`The MCP id "${WORKSPACE_ID}" is taken by the workspace tools.`)
           const client = await createMCPClient({ transport: {
             type: 'http', url: new URL(server.url, window.location.href).href,
             fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([abortSignal, AbortSignal.timeout(60_000), ...(init?.signal ? [init.signal] : [])]) }),
@@ -86,7 +93,13 @@ export function createBrowserAdapter(options: {
             const key = server.id + '__' + name
             if (tools[key]) throw new Error('Duplicate MCP tool: ' + key)
             tools[key] = tool
+            mcpTools.add(key)
           }
+        }
+        if (options.workspace) {
+          const { open, run } = options.workspace
+          let workspace: Workspace | undefined
+          Object.assign(tools, workspaceTools({ workspace: () => workspace ??= open(), run, tools: () => tools, isMcp: name => mcpTools.has(name) }))
         }
         const model = options.provider.createModel(options.values)
         const history = toModelMessages(messages)
