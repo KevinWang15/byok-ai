@@ -137,7 +137,7 @@ With `workspace`, each conversation gets a few text files, and the model can run
 | `workspace__save_tool_result` | Call another tool (MCP or page) and save its result to a file; returns the size and the first 600 characters. MCP results are saved as their structured content, or their text. |
 | `workspace__run_javascript` | Run code as an async function body with `files.list()`, `files.read(name)`, `files.readJSON(name)`, `files.write(name, textOrValue)`, `files.delete(name)` and `console.log`; returns what it `return`s (JSON, up to 20,000 characters) and the log. |
 
-Files live in the origin private file system (OPFS) under `byok-ai/<storageKey>/<conversation id>/files/`. They are kept across reloads, never uploaded, and deleted with their conversation. Names are flat (letters, digits, `.`, `-`, `_`). A file holds up to 8 MB, a conversation 200 files and 64 MB (`WORKSPACE_LIMITS`). The tools page lists the open conversation's files, and `useAskAI().workspace` reads them.
+Files live in the origin private file system (OPFS) under `<storageKey>/<conversation id>/files/`: the storage key is the top folder, so apps on one origin keep their files apart, as they do their localStorage keys. They are kept across reloads, never uploaded, and deleted with their conversation. Names are flat (letters, digits, `.`, `-`, `_`). A file holds up to 8 MB, a conversation 200 files and 64 MB (`WORKSPACE_LIMITS`). The tools page lists the open conversation's files, and `useAskAI().workspace` reads them.
 
 Scripts run in QuickJS, a separate JavaScript engine compiled to WebAssembly, in a worker started for each run. They see only the files and `console`: no network, DOM, storage, timers or imports. A run is stopped after 10 seconds or at 256 MB of memory (`SCRIPT_LIMITS`), and Stop ends it at once. A script works on a copy, and its writes are saved only if it finishes without an error. The worker and the engine's `.wasm` are separate files your bundler emits (Vite does so by default). A Content-Security-Policy must allow them: `worker-src 'self'`, `connect-src 'self'` (the worker fetches the `.wasm`) and `script-src 'wasm-unsafe-eval'`.
 
@@ -149,7 +149,7 @@ Browsers offer OPFS only in secure contexts: HTTPS, or `localhost`. On a page se
 
 With `images`, and a provider whose preset `acceptsImages`, the user can attach images to a message: with the attach button, by pasting into the message box, or by dropping them on the composer. A message holds up to 4 (`IMAGE_LIMITS`), of up to 20 MB each. Each is prepared when it is added: an image whose longer edge is over 1,568 px, or that is not PNG, JPEG or WebP, is scaled and encoded as PNG (PNG sources) or JPEG. A file the browser can't read, or one too many, is refused with a message where answer errors show.
 
-Sent images are kept with their conversation in OPFS (`byok-ai/<storageKey>/<conversation id>/images/`), not in localStorage; the message records only each image's id, name and type. Every later turn sends them to the model again. A provider that doesn't accept images gets a note in their place, as does an image that is no longer stored. Deleting a conversation deletes its images. Images attached but not sent are not saved: they are dropped on reload or when another conversation opens.
+Sent images are kept with their conversation in OPFS (`<storageKey>/<conversation id>/images/`), not in localStorage; the message records only each image's id, name and type. Every later turn sends them to the model again. A provider that doesn't accept images gets a note in their place, as does an image that is no longer stored. Deleting a conversation deletes its images. Images attached but not sent are not saved: they are dropped on reload or when another conversation opens.
 
 ## Custom UI
 
@@ -218,6 +218,7 @@ Assistants that pass the same `connectionKey` share one connection: connecting o
 - Tools run as soon as the model calls them; there is no approval step. Don't expose tools with effects the user hasn't agreed to.
 - Treat answers as untrusted: tool results can carry other people's text. Images in answers aren't loaded (see Custom UI); links need a click. A custom `img` component, or rendering answers as HTML, undoes that.
 - Use one `AskAI` or `mountAskAI` per `storageKey`: two mounted with the same key overwrite each other's conversations.
+- Apps on one origin (paths of a shared host) share localStorage and OPFS. Give each app's `storageKey`, `connectionKey` and `usePanelLayout` key the app's own prefix (`my-app:assistant`); the library stores nothing under any other name. The browser does not keep such apps apart from each other's scripts.
 
 ## Project layout
 

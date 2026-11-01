@@ -672,7 +672,7 @@ test('the workspace keeps files in the browser, runs scripts over them in a work
   const readFiles = () => page.evaluate(async id => {
     try {
       let dir = await navigator.storage.getDirectory()
-      for (const name of ['byok-ai', 'byok-ai%3aconversations', id, 'files']) dir = await dir.getDirectoryHandle(name)
+      for (const name of ['byok-ai%3aconversations', id, 'files']) dir = await dir.getDirectoryHandle(name)
       const files: Record<string, string> = {}
       for await (const handle of dir.values()) files[handle.name] = await (await (handle as FileSystemFileHandle).getFile()).text()
       return files
@@ -753,7 +753,7 @@ test('an attached image is scaled, sent to the model, kept across a reload, and 
   const images = () => page.evaluate(async () => {
     try {
       let dir = await navigator.storage.getDirectory()
-      for (const name of ['byok-ai', 'byok-ai%3aconversations']) dir = await dir.getDirectoryHandle(name)
+      for (const name of ['byok-ai%3aconversations']) dir = await dir.getDirectoryHandle(name)
       let count = 0
       for await (const conversation of dir.values()) {
         if (conversation.kind !== 'directory') continue

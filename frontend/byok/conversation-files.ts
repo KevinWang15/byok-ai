@@ -97,7 +97,9 @@ export function memoryConversationFiles(): ConversationFiles {
 }
 
 // ------------------------------------------------------------------------------------------------
-// The origin private file system: <root>/byok-ai/<storage key>/<conversation id>/{files,images}/<name>.
+// The origin private file system: <root>/<storage key>/<conversation id>/{files,images}/<name>. The
+// storage key is the top folder, as it prefixes the host's localStorage keys, so apps on one origin
+// (paths of a shared host) keep apart and nothing is shared between them.
 
 const STORAGE_UNAVAILABLE = 'This browser does not offer private file storage here, so files and images cannot be kept.'
 
@@ -117,8 +119,7 @@ async function rootOf(storageKey: string, create: boolean): Promise<FileSystemDi
   let root: FileSystemDirectoryHandle
   try { root = await navigator.storage.getDirectory() } catch { throw new Error(STORAGE_UNAVAILABLE) }
   try {
-    const library = await root.getDirectoryHandle('byok-ai', { create })
-    return await library.getDirectoryHandle(directoryName(storageKey), { create })
+    return await root.getDirectoryHandle(directoryName(storageKey), { create })
   } catch (error) {
     if (!create && notFound(error)) return undefined
     throw error
