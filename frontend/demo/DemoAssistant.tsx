@@ -1,7 +1,10 @@
 import { useId } from 'react'
 import { Button, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
 import { ComposerPrimitive, MessagePrimitive, ThreadPrimitive, groupPartByType, type ToolCallMessagePartProps } from '@assistant-ui/react'
-import { AskAIChat, AskAIHistory, AskAIMessageActions, AskAIMessageContent, usePanelLayout, AskAIPanel, AskAITrigger, MarkdownText, useAskAI, type ResizeEdge } from '../byok'
+import {
+  AskAIAddImage, AskAIChat, AskAIComposerImages, AskAIHistory, AskAIMessageActions, AskAIMessageContent, AskAIMessageImages, usePanelLayout,
+  AskAIPanel, AskAITrigger, MarkdownText, useAskAI, type ResizeEdge,
+} from '../byok'
 
 import { DemoIcon as Icon, type DemoIconName } from './DemoIcon'
 import { useActivity } from './activity'
@@ -13,13 +16,15 @@ function IconButton({ label, icon, disabled, onClick }: { label: string; icon: D
 }
 function DemoUserMessage() {
   return <MessagePrimitive.Root data-byok="message" data-role="user" className="chat-user-message">
-    <span className="chat-message-label">You</span><div className="chat-user-bubble"><AskAIMessageContent /></div>
+    <span className="chat-message-label">You</span><AskAIMessageImages /><div className="chat-user-bubble"><AskAIMessageContent /></div>
   </MessagePrimitive.Root>
 }
 const toolGroups = groupPartByType({ 'tool-call': ['group-tools'] })
 const toolLabels: Record<string, string> = {
-  workspace__search_docs: 'Search workspace docs',
-  workspace__get_current_time: 'Check current time',
+  docs__search_docs: 'Search the docs',
+  docs__get_current_time: 'Check current time',
+  workspace__save_tool_result: 'Save to file',
+  workspace__run_javascript: 'Calculate',
 }
 function ToolDetail({ toolName, argsText, result, isError, status }: ToolCallMessagePartProps) {
   const running = result === undefined && status.type === 'running'
@@ -76,10 +81,14 @@ function DemoEmpty() {
   </div>
 }
 function DemoComposer() {
-  const { connection } = useAskAI()
+  const { connection, images } = useAskAI()
   return <div className="chat-compose-area">
     <ComposerPrimitive.Root className="chat-compose">
-      <ComposerPrimitive.Input placeholder="Ask a question…" aria-label="Message" disabled={!connection} />
+      <ComposerPrimitive.AttachmentDropzone className="chat-compose-body" disabled={!images}>
+        <AskAIComposerImages />
+        <ComposerPrimitive.Input placeholder="Ask a question…" aria-label="Message" disabled={!connection} />
+      </ComposerPrimitive.AttachmentDropzone>
+      <AskAIAddImage className="chat-attach" aria-label="Attach image" title="Attach image"><Icon name="image" /></AskAIAddImage>
       <ThreadPrimitive.If running={false}><ComposerPrimitive.Send className="chat-send" aria-label="Send message" title="Send message" disabled={!connection}><Icon name="send" /></ComposerPrimitive.Send></ThreadPrimitive.If>
       <ThreadPrimitive.If running><ComposerPrimitive.Cancel className="chat-send" aria-label="Stop response" title="Stop response"><Icon name="stop" /></ComposerPrimitive.Cancel></ThreadPrimitive.If>
     </ComposerPrimitive.Root>

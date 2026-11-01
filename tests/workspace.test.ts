@@ -4,7 +4,7 @@ import variant from '@jitl/quickjs-wasmfile-release-sync'
 import { tool, jsonSchema, type ToolSet } from 'ai'
 import { MockLanguageModelV4 } from 'ai/test'
 import type { ChatModelRunOptions, ChatModelRunResult, ThreadMessage } from '@assistant-ui/react'
-import { fileNameProblem, memoryWorkspaceStore, writeProblem, WORKSPACE_LIMITS } from '../frontend/byok/workspace'
+import { fileNameProblem, memoryConversationFiles, writeProblem, WORKSPACE_LIMITS } from '../frontend/byok/conversation-files'
 import { runScript, SCRIPT_LIMITS } from '../frontend/byok/sandbox'
 import { toolResultText, workspaceTools } from '../frontend/byok/workspace-tools'
 import { createBrowserAdapter } from '../frontend/byok/agent'
@@ -28,14 +28,19 @@ test('file names are flat and plain; limits count UTF-8 bytes across the workspa
 })
 
 test('the memory store keeps each conversation apart and removes one whole', async () => {
-  const store = memoryWorkspaceStore()
-  await store.open('one').write('a.txt', 'hello')
-  assert.equal(await store.open('one').read('a.txt'), 'hello')
-  assert.equal(await store.open('two').read('a.txt'), undefined)
-  assert.deepEqual((await store.open('one').list()).map(f => [f.name, f.size]), [['a.txt', 5]])
-  await store.removeConversation('one')
-  assert.deepEqual(await store.open('one').list(), [])
-  await assert.rejects(store.open('one').read('../etc'), /file name/)
+  const store = memoryConversationFiles()
+  const image = 'a'.repeat(32)
+  await store.workspace('one').write('a.txt', 'hello')
+  await store.images('one').save(image, new Blob(['png']))
+  assert.equal(await store.workspace('one').read('a.txt'), 'hello')
+  assert.equal(await store.workspace('two').read('a.txt'), undefined)
+  assert.equal(await store.images('two').load(image), undefined)
+  assert.deepEqual((await store.workspace('one').list()).map(f => [f.name, f.size]), [['a.txt', 5]])
+  await store.remove('one')
+  assert.deepEqual(await store.workspace('one').list(), [])
+  assert.equal(await store.images('one').load(image), undefined)
+  await assert.rejects(store.workspace('one').read('../etc'), /file name/)
+  await assert.rejects(store.images('one').load('../etc'), /image id/)
 })
 
 test('a script reads files, returns a JSON value, and its writes and deletes come back', async () => {
@@ -101,8 +106,7 @@ test('MCP results are saved as their content; other results as JSON', () => {
 })
 
 test('the workspace tools read in pages, save tool results, and commit script writes only on success', async () => {
-  const store = memoryWorkspaceStore()
-  const workspace = store.open('c')
+  const workspace = memoryConversationFiles().workspace('c')
   const others: ToolSet = {
     list_orders: tool({ inputSchema: jsonSchema<{ n: number }>({ type: 'object', properties: { n: { type: 'number' } } }),
       execute: async ({ n }) => Array.from({ length: n }, (_, i) => ({ id: i, amount: i * 10 })) }),
@@ -138,7 +142,7 @@ test('the workspace tools read in pages, save tool results, and commit script wr
 })
 
 test('parallel workspace calls run one at a time', async () => {
-  const workspace = memoryWorkspaceStore().open('c')
+  const workspace = memoryConversationFiles().workspace('c')
   const tools = workspaceTools({ workspace: () => workspace, run: nodeRunner, tools: () => ({}), isMcp: () => false })
   await workspace.write('n', '0')
   const bump = 'files.write("n", String(Number(files.read("n")) + 1))'
@@ -155,10 +159,10 @@ test('the adapter offers the workspace tools when asked, and reserves the "works
     c.enqueue({ type: 'finish', finishReason: { unified: 'stop', raw: undefined }, usage }); c.close()
   } }) }) })
   const provider = { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model }
-  const store = memoryWorkspaceStore()
+  const store = memoryConversationFiles()
   const adapter = (servers: { id: string; name: string; url: string }[], errors: string[]) => createBrowserAdapter({
     provider, values: {}, servers, systemPrompt: '', maxSteps: 2, onError: e => errors.push(e),
-    workspace: { open: () => store.open('c'), run: nodeRunner },
+    workspace: { open: () => store.workspace('c'), run: nodeRunner },
   })
   for await (const _ of adapter([], []).run(runOptions) as AsyncGenerator<ChatModelRunResult>) { void _ }
   const offered = (model.doStreamCalls[0].tools ?? []).map(t => t.name).sort()

@@ -135,5 +135,5 @@ export function YourPage() {
   </div>
 }
 export default function App() {
-  return <AskAIProvider mcpServers={servers} workspace><DemoContent /></AskAIProvider>
+  return <AskAIProvider mcpServers={servers} workspace images><DemoContent /></AskAIProvider>
 }

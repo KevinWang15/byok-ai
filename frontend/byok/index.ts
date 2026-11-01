@@ -1,4 +1,8 @@
-export { AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIMessageActions, AskAIHistory, AskAITools } from './AskAI'
+export {
+  AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIMessageActions, AskAIHistory, AskAITools,
+  AskAIComposerImages, AskAIMessageImages, AskAIAddImage,
+} from './AskAI'
+export { useAskAIImage } from './useAskAIImage'
 export { AskAIProvider } from './AskAIProvider'
 export { useAskAI } from './context'
 export { usePanelLayout } from './usePanelLayout'
@@ -8,9 +12,10 @@ export { createBrowserAdapter } from './agent'
 export { defaultProviders } from './providers'
 export type { AskAIOptions, AskAIProps, AskAIChatProps, AskAIProviderProps, ProviderPreset, ProviderFormProps, ProviderValues, McpServerConfig } from './types'
 export type { Conversation } from './storage'
-export { WORKSPACE_LIMITS } from './workspace'
-export type { Workspace, WorkspaceFile } from './workspace'
+export { WORKSPACE_LIMITS } from './conversation-files'
+export type { Workspace, WorkspaceFile } from './conversation-files'
 export { SCRIPT_LIMITS } from './sandbox'
+export { IMAGE_LIMITS } from './images'
 export { mountAskAI } from './mount'
 export { MarkdownText } from './MarkdownText'
 export type { MarkdownTextPrimitiveProps as MarkdownTextProps } from '@assistant-ui/react-markdown'

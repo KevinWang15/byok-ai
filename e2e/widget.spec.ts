@@ -672,7 +672,7 @@ test('the workspace keeps files in the browser, runs scripts over them in a work
   const readFiles = () => page.evaluate(async id => {
     try {
       let dir = await navigator.storage.getDirectory()
-      for (const name of ['byok-ai', 'byok-ai%3aconversations', id]) dir = await dir.getDirectoryHandle(name)
+      for (const name of ['byok-ai', 'byok-ai%3aconversations', id, 'files']) dir = await dir.getDirectoryHandle(name)
       const files: Record<string, string> = {}
       for await (const handle of dir.values()) files[handle.name] = await (await (handle as FileSystemFileHandle).getFile()).text()
       return files
@@ -711,4 +711,85 @@ test('Stop ends a script that never finishes', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeVisible()
   expect(Date.now() - stopped).toBeLessThan(3_000)
   expect(requests).toBe(1)
+})
+
+test('an attached image is scaled, sent to the model, kept across a reload, and goes with its conversation', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  let sentImage = ''
+  await page.route(MODEL, route => {
+    const user = (route.request().postDataJSON().messages as { role: string; content: unknown }[]).find(m => m.role === 'user')!
+    const parts = user.content as { type: string; image_url?: { url: string } }[]
+    sentImage = parts.find(p => p.type === 'image_url')?.image_url?.url ?? ''
+    return route.fulfill(answer('A purple rectangle.'))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  // A 3000×1500 PNG: wider than models read, so it is scaled to 1568 wide.
+  const png = await page.evaluate(async () => {
+    const canvas = new OffscreenCanvas(3000, 1500)
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#8b739f'
+    context.fillRect(0, 0, 3000, 1500)
+    const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer())
+    return btoa(String.fromCharCode(...bytes))
+  })
+  await openChat(page)
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Attach image' }).click()
+  await (await chooser).setFiles({ name: 'chart.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
+  await expect(page.getByRole('img', { name: 'chart.png' })).toBeVisible()
+  await messageBox(page).fill('What is this?')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('A purple rectangle.', { exact: true })).toBeVisible()
+  expect(sentImage).toMatch(/^data:image\/png;base64,/)
+  const header = Buffer.from(sentImage.split(',')[1]!, 'base64')
+  expect([header.readUInt32BE(16), header.readUInt32BE(20)]).toEqual([1568, 784])
+  await expect(page.getByRole('button', { name: 'Remove chart.png' })).toHaveCount(0)
+
+  await page.reload()
+  await openChat(page)
+  await expect(page.getByRole('img', { name: 'chart.png' })).toBeVisible()
+  const images = () => page.evaluate(async () => {
+    try {
+      let dir = await navigator.storage.getDirectory()
+      for (const name of ['byok-ai', 'byok-ai%3aconversations']) dir = await dir.getDirectoryHandle(name)
+      let count = 0
+      for await (const conversation of dir.values()) {
+        if (conversation.kind !== 'directory') continue
+        try { for await (const image of (await (conversation as FileSystemDirectoryHandle).getDirectoryHandle('images')).keys()) count += image ? 1 : 0 } catch { /* none */ }
+      }
+      return count
+    } catch { return 0 }
+  })
+  expect(await images()).toBe(1)
+  await page.getByRole('button', { name: 'Conversation history' }).click()
+  await page.getByRole('button', { name: 'Delete What is this?', exact: true }).click()
+  await page.getByRole('dialog', { name: 'Delete conversation?', exact: true }).getByRole('button', { name: 'Delete conversation', exact: true }).click()
+  await expect.poll(images).toBe(0)
+  expect(errors).toEqual([])
+})
+
+test('at most four images go in a message, and an image that cannot be read says so', async ({ page }) => {
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  const attach = page.getByRole('button', { name: 'Attach image' })
+  await expect(attach).toBeVisible()
+  const add = async (files: { name: string; mimeType: string; buffer: Buffer }[]) => {
+    const chooser = page.waitForEvent('filechooser')
+    await attach.click()
+    await (await chooser).setFiles(files)
+  }
+  await add([{ name: 'broken.png', mimeType: 'image/png', buffer: Buffer.from('not a png') }])
+  await expect(page.getByRole('alert')).toContainText('"broken.png" could not be read as an image.')
+  const tiny = Buffer.from(await page.evaluate(async () => {
+    const canvas = new OffscreenCanvas(4, 4)
+    canvas.getContext('2d')!.fillRect(0, 0, 4, 4)
+    const bytes = new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer())
+    return btoa(String.fromCharCode(...bytes))
+  }), 'base64')
+  await add(Array.from({ length: 5 }, (_, i) => ({ name: `dot${i}.png`, mimeType: 'image/png', buffer: tiny })))
+  await expect(page.locator('[data-byok="composer-images"] [data-byok="image"]')).toHaveCount(4)
+  await expect(page.getByRole('alert')).toContainText('at most 4 images')
 })

@@ -1,17 +1,36 @@
-import { streamText, stepCountIs, ToolChoiceViolationError, type ModelMessage, type ToolSet } from 'ai'
+import { streamText, stepCountIs, ToolChoiceViolationError, type ModelMessage, type ToolSet, type UserContent } from 'ai'
 import { createMCPClient, type MCPClient } from '@ai-sdk/mcp'
 import type { ChatModelAdapter, ThreadMessage, ThreadAssistantMessagePart } from '@assistant-ui/react'
 import type { McpServerConfig, ProviderPreset, ProviderValues } from './types'
-import type { Workspace } from './workspace'
+import type { ImageStore, Workspace } from './conversation-files'
+import { isImageAttachment } from './images'
 import type { ScriptRunner } from './script-runner'
 import { WORKSPACE_ID, workspaceTools } from './workspace-tools'
 
-/** Preserve interleaved calls/results, and repair calls interrupted before a result arrived. */
-export function toModelMessages(messages: readonly ThreadMessage[]): ModelMessage[] {
+/** Said in place of an image the model can't be given. */
+export const IMAGE_NOTES = {
+  unsupported: 'The user attached an image here, but this model does not accept images.',
+  missing: 'The user attached an image here that is no longer stored in this browser.',
+}
+
+/**
+ * Preserve interleaved calls/results, and repair calls interrupted before a result arrived. A user
+ * message's images come from `images` when the model accepts them; otherwise a note says one was there.
+ */
+export async function toModelMessages(messages: readonly ThreadMessage[], images?: { store: ImageStore; accepted: boolean }): Promise<ModelMessage[]> {
   const output: ModelMessage[] = []
   for (const message of messages) {
     if (message.role !== 'assistant') {
-      output.push({ role: message.role, content: message.content.flatMap(p => p.type === 'text' ? [p.text] : []).join('\n') })
+      const text = message.content.flatMap(p => p.type === 'text' ? [p.text] : []).join('\n')
+      const attached = message.role === 'user' ? message.attachments.filter(isImageAttachment) : []
+      if (message.role === 'system' || !attached.length) { output.push({ role: message.role, content: text }); continue }
+      const content: Exclude<UserContent, string> = text ? [{ type: 'text', text }] : []
+      for (const attachment of attached) {
+        const image = images?.accepted ? await images.store.load(attachment.id).catch(() => undefined) : undefined
+        if (image) content.push({ type: 'image', image: new Uint8Array(await image.arrayBuffer()), mediaType: attachment.contentType })
+        else content.push({ type: 'text', text: images?.accepted ? IMAGE_NOTES.missing : IMAGE_NOTES.unsupported })
+      }
+      output.push({ role: 'user', content })
       continue
     }
     for (const part of message.content) {
@@ -55,6 +74,8 @@ export function createBrowserAdapter(options: {
   clientTools?: () => ToolSet
   // The open conversation's files and how scripts run over them: adds the workspace tools.
   workspace?: { open: () => Workspace; run: ScriptRunner }
+  // The open conversation's images, which go to the model if its provider accepts images.
+  images?: ImageStore
   systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number; onError: (message: string) => void
 }): ChatModelAdapter {
   return {
@@ -102,7 +123,7 @@ export function createBrowserAdapter(options: {
           Object.assign(tools, workspaceTools({ workspace: () => workspace ??= open(), run, tools: () => tools, isMcp: name => mcpTools.has(name) }))
         }
         const model = options.provider.createModel(options.values)
-        const history = toModelMessages(messages)
+        const history = await toModelMessages(messages, options.images && { store: options.images, accepted: options.provider.acceptsImages === true })
         const finalInstructions = [options.systemPrompt, FINAL_STEP_INSTRUCTION].filter(Boolean).join('\n\n')
         // Streams one run into content; returns how it ended.
         const pump = async function* (result: ReturnType<typeof streamText>) {

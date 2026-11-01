@@ -1,5 +1,5 @@
 import { newQuickJSWASMModuleFromVariant, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSHandle, type QuickJSSyncVariant } from 'quickjs-emscripten-core'
-import { fileNameProblem, writeProblem, type WorkspaceFile } from './workspace'
+import { fileNameProblem, writeProblem, type WorkspaceFile } from './conversation-files'
 
 // Runs a script the model wrote over a snapshot of a conversation's files, in QuickJS: a separate
 // JavaScript engine compiled to WebAssembly, which sees only what is handed to it here. There is no

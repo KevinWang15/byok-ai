@@ -20,7 +20,7 @@ beforeEach(() => {
   } })
 })
 const at = new Date(Date.UTC(2026, 9, 30)).toISOString()
-const userMessage = { id: 'u', role: 'user', createdAt: at, content: [{ type: 'text', text: 'Question' }] }
+const userMessage = { id: 'u', role: 'user', createdAt: at, content: [{ type: 'text', text: 'Question' }], attachments: [] }
 
 test('conversations and the open one round-trip through their key', () => {
   const data = { conversations: [{ id: 'c', title: 'Question', updatedAt: 1, draft: 'Unsent', messages: [userMessage] }], activeConversationId: 'c' }

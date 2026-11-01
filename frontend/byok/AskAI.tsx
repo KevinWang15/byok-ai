@@ -1,13 +1,14 @@
 import { useContext, useEffect, useId, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
-import { ActionBarPrimitive, ThreadPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState, type ToolCallMessagePartComponent } from '@assistant-ui/react'
+import { ActionBarPrimitive, AttachmentPrimitive, ThreadPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState, type ToolCallMessagePartComponent } from '@assistant-ui/react'
 import { Button, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Input, Label, Legend } from '@headlessui/react'
 import { AskAIProvider } from './AskAIProvider'
 import { useAskAI } from './context'
 import { MarkdownText } from './MarkdownText'
 import { AskAIHistory } from './AskAIHistory'
 import { MessageRenderingContext } from './rendering-context'
+import { useAskAIImage } from './useAskAIImage'
 import type { AskAIChatProps, AskAIProps, ProviderPreset, ProviderValues } from './types'
-import type { Workspace, WorkspaceFile } from './workspace'
+import type { Workspace, WorkspaceFile } from './conversation-files'
 
 const TOOL_STATUS = { running: 'Running…', 'requires-action': 'Running…', incomplete: 'Stopped', complete: 'Done' } as const
 const Tool: ToolCallMessagePartComponent = ({ toolName, result, argsText, isError, status }) => (
@@ -42,17 +43,50 @@ export function AskAIMessageActions({ copy = 'Copy response', copied = 'Copied',
     <ActionBarPrimitive.Reload data-byok="message-regenerate" disabled={!connection}>{regenerate}</ActionBarPrimitive.Reload>
   </ActionBarPrimitive.Root>
 }
+function ImageThumb() {
+  const { src, name, missing } = useAskAIImage()
+  const sent = useAuiState(state => state.attachment.status.type === 'complete')
+  return <AttachmentPrimitive.Root data-byok="image" data-missing={missing || undefined}>
+    {src ? <img src={src} alt={name} /> : <span>{missing ? `${name} (no longer stored)` : name}</span>}
+    {!sent && <AttachmentPrimitive.Remove data-byok="image-remove" aria-label={`Remove ${name}`}>Remove</AttachmentPrimitive.Remove>}
+  </AttachmentPrimitive.Root>
+}
+const IMAGE_COMPONENTS = { Image: ImageThumb, Attachment: ImageThumb }
+/** The images attached in the composer, each with a remove button. Use inside a composer. */
+export function AskAIComposerImages() {
+  return <div data-byok="composer-images"><ComposerPrimitive.Attachments components={IMAGE_COMPONENTS} /></div>
+}
+/** The images sent with the enclosing user message. */
+export function AskAIMessageImages() {
+  return <div data-byok="message-images"><MessagePrimitive.Attachments components={IMAGE_COMPONENTS} /></div>
+}
+/**
+ * Opens the file picker for images. Renders nothing while images can't be attached (the `images`
+ * option is off, or the provider doesn't accept them). Pasting into the message box and dropping
+ * on `ComposerPrimitive.AttachmentDropzone` attach too.
+ */
+export function AskAIAddImage({ children = 'Attach image', ...props }: ComponentPropsWithoutRef<typeof ComposerPrimitive.AddAttachment>) {
+  const { images, connection } = useAskAI()
+  if (!images) return null
+  return <ComposerPrimitive.AddAttachment data-byok="add-image" disabled={!connection} {...props}>{children}</ComposerPrimitive.AddAttachment>
+}
+
 function Message() {
   const role = useAuiState(state => state.message.role)
   return <MessagePrimitive.Root data-byok="message" data-role={role}>
+    {role === 'user' && <AskAIMessageImages />}
     <AskAIMessageContent />{role === 'assistant' && <AskAIMessageActions />}
   </MessagePrimitive.Root>
 }
 function DefaultEmpty() { return <p>Start a conversation.</p> }
 function DefaultComposer() {
-  const { connection } = useAskAI()
+  const { connection, images } = useAskAI()
   return <ComposerPrimitive.Root data-byok="composer">
-    <ComposerPrimitive.Input placeholder="Ask anything…" aria-label="Message" disabled={!connection} />
+    <ComposerPrimitive.AttachmentDropzone data-byok="composer-dropzone" disabled={!images}>
+      <AskAIComposerImages />
+      <ComposerPrimitive.Input placeholder="Ask anything…" aria-label="Message" disabled={!connection} />
+    </ComposerPrimitive.AttachmentDropzone>
+    <AskAIAddImage />
     <ThreadPrimitive.If running={false}><ComposerPrimitive.Send disabled={!connection}>Send message</ComposerPrimitive.Send></ThreadPrimitive.If>
     <ThreadPrimitive.If running><ComposerPrimitive.Cancel>Stop response</ComposerPrimitive.Cancel></ThreadPrimitive.If>
   </ComposerPrimitive.Root>

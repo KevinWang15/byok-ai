@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AssistantRuntimeProvider, useLocalRuntime, type ChatModelAdapter } from '@assistant-ui/react'
+import { AssistantRuntimeProvider, useLocalRuntime, type AssistantRuntime, type ChatModelAdapter } from '@assistant-ui/react'
 import type { ToolSet } from 'ai'
 import { AskAIContext, type AskAIContextValue, type AskAIPage, type ProviderConnection } from './context'
 import { defaultProviders } from './providers'
 import { createBrowserAdapter } from './agent'
-import { opfsWorkspaceStore, type WorkspaceStore } from './workspace'
+import { opfsConversationFiles, type ConversationFiles } from './conversation-files'
+import { imageAttachmentAdapter } from './images'
 import { workerScriptRunner } from './script-runner'
 import {
   DEFAULT_STORAGE_KEY, defaultConnectionKey, isEmptyConversation, loadConnection, loadConversations, newConversation,
@@ -22,13 +23,16 @@ function connectionOf(providers: ProviderPreset[], saved: StoredConnection | und
   return provider && saved ? { provider, values: { ...saved.values } } : undefined
 }
 
-type State = Omit<AskAIContextValue, 'runtime' | 'error'>
-function Runtime({ state, clientTools, workspaces, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, save, onBusy, children }: {
-  state: State; clientTools: ToolSet; workspaces?: WorkspaceStore; systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number
+type State = Omit<AskAIContextValue, 'runtime' | 'error' | 'images'>
+function Runtime({ state, clientTools, files, workspace, images, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, save, onBusy, children }: {
+  state: State; clientTools: ToolSet; files: ConversationFiles; workspace: boolean; images: boolean
+  systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number
   save: (conversation: Conversation) => void; onBusy: (busy: boolean) => void; children: ReactNode
 }) {
   const [error, setError] = useState('')
   const { connection, mcpServers, activeConversation } = state
+  // Attaching is offered while connected to a provider whose model takes images.
+  const attaching = images && connection?.provider.acceptsImages === true
   // Page tools change with the page's state. Calls use the latest definitions, so the runtime
   // restarts only when the set of names changes.
   const toolsRef = useRef(clientTools)
@@ -45,17 +49,32 @@ function Runtime({ state, clientTools, workspaces, systemPrompt, maxSteps, maxOu
       return createBrowserAdapter({
         ...connection, servers: mcpServers, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, onError: setError,
         clientTools: () => toolsRef.current,
-        workspace: workspaces && { open: () => workspaces.open(conversationId), run: workerScriptRunner },
+        workspace: workspace ? { open: () => files.workspace(conversationId), run: workerScriptRunner } : undefined,
+        // Images already in the conversation go to the model even if attaching is now off.
+        images: files.images(conversationId),
       }).run(options)
     } }
   // toolNames stands for the tools: their definitions are read through the ref.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection, mcpServers, toolNames, workspaces, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls])
-  const runtime = useLocalRuntime(adapter, { initialMessages: activeConversation.messages })
-  // Opening a conversation loads it into the thread; saving the open one doesn't.
+  }, [connection, mcpServers, toolNames, files, workspace, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls])
+  // The composer's images are saved to the conversation open when the message is sent. The refs
+  // are read when an image is added or sent, never while rendering.
+  const runtimeRef = useRef<AssistantRuntime>(null)
+  // eslint-disable-next-line react-hooks/refs
+  const attachments = useMemo(() => attaching ? imageAttachmentAdapter({
+    attached: () => runtimeRef.current?.thread.composer.getState().attachments.length ?? 0,
+    images: () => files.images(activeRef.current.id),
+  }) : undefined, [attaching, files])
+  const runtime = useLocalRuntime(adapter, { initialMessages: activeConversation.messages, adapters: { attachments } })
+  useLayoutEffect(() => { runtimeRef.current = runtime })
+  // An image that can't be attached (too many, unreadable) says why, where answers' errors show.
+  useEffect(() => runtime.thread.composer.unstable_on('attachmentAddError', event => setError(event.message)), [runtime])
+  // Opening a conversation loads it into the thread; saving the open one doesn't. Images not yet
+  // sent stay with the conversation they were attached in, which is to say they are dropped.
   useEffect(() => {
     runtime.thread.reset(activeRef.current.messages)
     runtime.thread.composer.setText(activeRef.current.draft)
+    void runtime.thread.composer.clearAttachments()
   }, [runtime, activeConversation.id])
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -69,7 +88,8 @@ function Runtime({ state, clientTools, workspaces, systemPrompt, maxSteps, maxOu
       savedMessages = messages
       savedDraft = draft
       const first = messages.find(m => m.role === 'user')
-      const title = first?.content.flatMap(p => p.type === 'text' ? [p.text] : []).join(' ').slice(0, 48) || 'New conversation'
+      const title = first?.content.flatMap(p => p.type === 'text' ? [p.text] : []).join(' ').slice(0, 48)
+        || (first?.role === 'user' && first.attachments.length ? 'Image' : 'New conversation')
       save({ id: activeConversation.id, title, messages, draft, updatedAt: Date.now() })
     }
     const unsubscribe = runtime.thread.subscribe(() => {
@@ -92,11 +112,11 @@ function Runtime({ state, clientTools, workspaces, systemPrompt, maxSteps, maxOu
     }
   }, [runtime, activeConversation.id, save, onBusy])
   return <AssistantRuntimeProvider runtime={runtime}>
-    <AskAIContext.Provider value={{ ...state, runtime, error }}>{children}</AskAIContext.Provider>
+    <AskAIContext.Provider value={{ ...state, images: attaching, runtime, error }}>{children}</AskAIContext.Provider>
   </AssistantRuntimeProvider>
 }
 
-function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVERS, clientTools = NO_TOOLS, workspace = false, systemPrompt = DEFAULT_PROMPT,
+function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVERS, clientTools = NO_TOOLS, workspace = false, images = false, systemPrompt = DEFAULT_PROMPT,
   storageKey = DEFAULT_STORAGE_KEY, connectionKey = defaultConnectionKey(storageKey), title = 'Ask AI', maxSteps = 8, maxOutputTokens, maxToolCalls, children }: AskAIProviderProps) {
   if (connectionKey === storageKey) throw new Error('connectionKey must differ from storageKey.')
   // The saved conversations and which one is open. A new conversation is open but not listed (or
@@ -115,8 +135,11 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
   const activeId = store.activeConversationId!
   const blank = useMemo(() => newConversation(activeId), [activeId])
   const activeConversation = store.conversations.find(c => c.id === activeId) ?? blank
-  const workspaces = useMemo(() => workspace ? opfsWorkspaceStore(storageKey) : undefined, [workspace, storageKey])
-  const openWorkspace = useMemo(() => workspaces?.open(activeId), [workspaces, activeId])
+  // What conversations keep besides their messages: workspace files and images. Opening it costs
+  // nothing; storage is touched only when something is read or written.
+  const files = useMemo(() => opfsConversationFiles(storageKey), [storageKey])
+  const openWorkspace = useMemo(() => workspace ? files.workspace(activeId) : undefined, [workspace, files, activeId])
+  const loadImage = useCallback((id: string) => files.images(activeId).load(id), [files, activeId])
 
   const [open, setOpen] = useState(false)
   const [page, updatePage] = useState<AskAIPage>('chat')
@@ -151,7 +174,7 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
     updatePage('chat')
   }
   const state: State = {
-    title, providers, mcpServers, clientTools: Object.keys(clientTools), workspace: openWorkspace, open, setOpen, page, connection, connect,
+    title, providers, mcpServers, clientTools: Object.keys(clientTools), workspace: openWorkspace, loadImage, open, setOpen, page, connection, connect,
     conversations: store.conversations, activeConversation, busy, storageError,
     setPage: next => { if (!busy) updatePage(next) },
     disconnect: () => { if (!busy) { persistConnection(undefined); setConnection(undefined); updatePage('settings') } },
@@ -162,10 +185,11 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
       const conversations = storeRef.current.conversations.filter(c => c.id !== id)
       const activeConversationId = storeRef.current.activeConversationId === id ? newConversation().id : storeRef.current.activeConversationId
       commit({ conversations, activeConversationId })
-      workspaces?.removeConversation(id).catch(() => setStorageError(true))
+      // Whatever it kept, whether or not the workspace and images are on now.
+      files.remove(id).catch(() => setStorageError(true))
     },
   }
-  return <Runtime state={state} clientTools={clientTools} workspaces={workspaces} systemPrompt={systemPrompt}
+  return <Runtime state={state} clientTools={clientTools} files={files} workspace={workspace} images={images} systemPrompt={systemPrompt}
     maxSteps={maxSteps} maxOutputTokens={maxOutputTokens} maxToolCalls={maxToolCalls} save={save} onBusy={setBusy}>
     {children}
   </Runtime>

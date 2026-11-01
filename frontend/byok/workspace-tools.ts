@@ -1,5 +1,5 @@
 import { jsonSchema, tool, type ToolSet } from 'ai'
-import type { Workspace } from './workspace'
+import type { Workspace } from './conversation-files'
 import { SCRIPT_LIMITS } from './sandbox'
 import type { ScriptRunner } from './script-runner'
 

@@ -1,5 +1,6 @@
 import type { ThreadMessage } from '@assistant-ui/react'
 import type { ProviderValues } from './types'
+import { isImageId } from './conversation-files'
 
 // What the library saves in localStorage, under two keys:
 // - the conversations key (`storageKey`): the conversations and which one is open;
@@ -36,9 +37,14 @@ export const isEmptyConversation = (conversation: Pick<Conversation, 'messages' 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 
+// A sent image: its bytes are in the conversation's image store, under its id (images.ts).
+const isSavedImage = (value: unknown) => isRecord(value) && value.type === 'image' && typeof value.id === 'string' && isImageId(value.id) &&
+  typeof value.name === 'string' && typeof value.contentType === 'string' && isRecord(value.status) && value.status.type === 'complete'
 function readMessage(value: unknown): ThreadMessage | undefined {
   if (!isRecord(value) || typeof value.id !== 'string' || !['user', 'assistant', 'system'].includes(String(value.role)) || !Array.isArray(value.content)) return
   if (!value.content.every(part => isRecord(part) && typeof part.type === 'string' && (part.type !== 'text' || typeof part.text === 'string'))) return
+  // A user message's attachments are the images sent with it.
+  if (value.role === 'user' && (!Array.isArray(value.attachments) || !value.attachments.every(isSavedImage))) return
   const createdAt = new Date(typeof value.createdAt === 'string' ? value.createdAt : NaN)
   if (!Number.isFinite(createdAt.getTime())) return
   // A response still running when the page closed can't be resumed: it is shown as cancelled.

@@ -2,7 +2,7 @@ import { createContext, useContext } from 'react'
 import type { AssistantRuntime } from '@assistant-ui/react'
 import type { ProviderPreset, ProviderValues, AskAIOptions } from './types'
 import type { Conversation } from './storage'
-import type { Workspace } from './workspace'
+import type { Workspace } from './conversation-files'
 
 export type AskAIPage = 'chat' | 'settings' | 'history' | 'tools'
 export interface ProviderConnection { provider: ProviderPreset; values: ProviderValues }
@@ -14,6 +14,10 @@ export interface AskAIContextValue {
   clientTools: string[]
   /** The open conversation's files, when the workspace is on. */
   workspace?: Workspace
+  /** Whether the user can attach images now: the `images` option, with a provider that accepts them. */
+  images: boolean
+  /** An image of the open conversation by attachment id; undefined when it is no longer stored. */
+  loadImage: (id: string) => Promise<Blob | undefined>
   open: boolean
   setOpen: (open: boolean) => void
   page: AskAIPage

@@ -16,6 +16,8 @@ export interface ProviderPreset {
   Form?: ComponentType<ProviderFormProps>
   validate?: (values: ProviderValues) => string | undefined
   createModel: (values: ProviderValues) => LanguageModel
+  /** Whether the model takes images in the user's messages (the `images` option). Default false. */
+  acceptsImages?: boolean
 }
 export interface McpServerConfig {
   /** Unique identifier; used to namespace tool names. */
@@ -40,6 +42,13 @@ export interface AskAIOptions {
    * no MCP server may use the id "workspace". Deleting a conversation deletes its files. Default false.
    */
   workspace?: boolean
+  /**
+   * Lets the user attach images to a message (button, paste or drop) when the connected provider
+   * `acceptsImages`. Images are scaled to what models read and kept with the conversation in the
+   * browser's private file system (OPFS), not in localStorage; each later turn sends them again.
+   * Deleting a conversation deletes them. Default false.
+   */
+  images?: boolean
   systemPrompt?: string
   /** Where conversations and the open one are saved. Default `byok-ai:conversations`. */
   storageKey?: string

@@ -164,6 +164,18 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 .chat-compose:focus-within { border-color: #cdbbdd; box-shadow: 0 0 0 3px #f5f0fa; }
 .chat-compose textarea { border: 0; outline: 0!important; background: none; color: #584660; font-size: 13px; line-height: 1.6; resize: none; width: 100%; min-width: 0; min-height: 32px; max-height: 130px; padding: 4px 0; }
 .chat-compose textarea::placeholder { color: #b1a4ba; }
+.chat-compose-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; border-radius: 10px; }
+.chat-compose-body[data-dragging] { outline: 2px dashed #cdbbdd; outline-offset: 4px; }
+.chat-attach { display: grid; place-items: center; flex-shrink: 0; width: 33px; height: 33px; border: 0; border-radius: 10px; background: none; color: #a18caf; }
+.chat-attach:hover { background: #f5f0fa; color: #8b739f; }
+[data-byok="composer-images"]:empty, [data-byok="message-images"]:empty { display: none; }
+[data-byok="composer-images"], [data-byok="message-images"] { display: flex; flex-wrap: wrap; gap: 6px; }
+[data-byok="message-images"] { justify-content: flex-end; margin-bottom: 6px; }
+[data-byok="image"] { position: relative; display: grid; place-items: center; width: 56px; height: 56px; border-radius: 10px; overflow: hidden; background: #f5f0fa; color: #8b739f; font-size: 9px; text-align: center; }
+[data-byok="message-images"] [data-byok="image"] { width: 120px; height: 90px; }
+[data-byok="image"] img { width: 100%; height: 100%; object-fit: cover; }
+[data-byok="image-remove"] { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: #584660cc; color: #fff; font-size: 0; }
+[data-byok="image-remove"]::before { content: '×'; font-size: 13px; line-height: 18px; }
 .chat-send { display: grid; place-items: center; flex-shrink: 0; width: 33px; height: 33px; border: 0; border-radius: 10px; background: #8b739f; color: #fff!important; }
 .chat-send:disabled { opacity: 1!important; background: #f0eaf5; color: #c4b5d0!important; }
 .chat-empty { text-align: center; padding: 18px 0 12px; }

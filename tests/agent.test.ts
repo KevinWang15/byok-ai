@@ -144,9 +144,9 @@ test('client tools run in the page beside MCP tools; names with "__" are refused
     values: {}, servers: [], clientTools: () => ({ a__b: clientTools.set_title }), systemPrompt: '', maxSteps: 1, onError: e => errors.push(e) })
   await assert.rejects(async () => { for await (const _ of bad.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ } })
 })
-test('interrupted tool calls always get a matching result in subsequent history', () => {
+test('interrupted tool calls always get a matching result in subsequent history', async () => {
   const assistant = { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'c', toolName: 'tool', args: {}, argsText: '{}' }] } as unknown as ThreadMessage
-  const result = toModelMessages([user, assistant])
+  const result = await toModelMessages([user, assistant])
   assert.equal(result.length, 3)
   assert.equal(result[2].role, 'tool')
   assert.match(JSON.stringify(result[2]), /interrupted/)
