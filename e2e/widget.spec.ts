@@ -812,3 +812,18 @@ test('without private file storage (plain HTTP), there is no workspace and no at
   expect(tools.length).toBeGreaterThan(0)
   expect(tools.filter(name => name.startsWith('workspace__'))).toEqual([])
 })
+
+test('an image written into an answer is described, never loaded', async ({ page }) => {
+  const fetched: string[] = []
+  await page.route('https://elsewhere.example/**', route => { fetched.push(route.request().url()); return route.fulfill({ status: 200, body: '' }) })
+  await page.route(MODEL, route => route.fulfill(answer('Here it is. ![revenue chart](https://elsewhere.example/c.png?d=private-figures)')))
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  await messageBox(page).fill('Show me')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('[image: revenue chart]')).toBeVisible()
+  await expect(page.locator('[data-byok="markdown"] img')).toHaveCount(0)
+  await page.waitForTimeout(500)
+  expect(fetched).toEqual([])
+})

