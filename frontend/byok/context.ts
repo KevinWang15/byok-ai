@@ -3,6 +3,7 @@ import type { AssistantRuntime } from '@assistant-ui/react'
 import type { ProviderPreset, ProviderValues, AskAIOptions } from './types'
 import type { Conversation } from './storage'
 import type { Workspace } from './conversation-files'
+import type { AnswerComponent } from './answer-components'
 
 export type AskAIPage = 'chat' | 'settings' | 'history' | 'tools'
 export interface ProviderConnection { provider: ProviderPreset; values: ProviderValues }
@@ -10,6 +11,7 @@ export interface AskAIContextValue {
   title: string
   providers: ProviderPreset[]
   mcpServers: NonNullable<AskAIOptions['mcpServers']>
+  answerComponents: readonly AnswerComponent[]
   /** Names of the tools that run in the page. */
   clientTools: string[]
   /** The open conversation's files, when the workspace is on. */
@@ -37,6 +39,8 @@ export interface AskAIContextValue {
 }
 export const AskAIContext = createContext<AskAIContextValue | null>(null)
 /** State, actions, and the assistant-ui runtime, without any UI or CSS. */
+/** The enclosing AskAIProvider's state, or null outside one. */
+export const useAskAIOptional = () => useContext(AskAIContext)
 export function useAskAI(): AskAIContextValue {
   const value = useContext(AskAIContext)
   if (!value) throw new Error('useAskAI must be used inside AskAIProvider or AskAI.')

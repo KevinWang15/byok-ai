@@ -1,6 +1,7 @@
 import type { ComponentType, ReactNode } from 'react'
 import type { LanguageModel, ToolSet } from 'ai'
 import type { TextMessagePartComponent, ToolCallMessagePartComponent } from '@assistant-ui/react'
+import type { AnswerComponent } from './answer-components'
 
 export type ProviderValues = Record<string, string>
 export interface ProviderFormProps {
@@ -51,6 +52,15 @@ export interface AskAIOptions {
    * Deleting a conversation deletes them. Default false. Like `workspace`, only in secure contexts.
    */
   images?: boolean
+  /**
+   * Components the model may place in its answers, such as charts: it writes a
+   * ```component:<name>``` fence with JSON props, and the default Markdown renders the host's
+   * component there (answer-components.ts). The model is told about them unless
+   * `componentInstructions` is false.
+   */
+  answerComponents?: readonly AnswerComponent[]
+  /** Adds the answer components' instructions to the system prompt. Default true. */
+  componentInstructions?: boolean
   systemPrompt?: string
   /** Where conversations and the open one are saved. Default `byok-ai:conversations`. */
   storageKey?: string

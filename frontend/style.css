@@ -294,3 +294,13 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
   .demo-chat-shell[data-maximized="true"] { border-radius: 16px; }
   .demo-chat-shell[data-positioned="true"] { --chat-margin: 12px; }
 }
+
+/* The demo's answer component (demo/components.tsx). */
+.demo-stat-card { margin: 0; display: grid; gap: 2px; padding: 14px 16px; border-radius: 12px; background: rgb(99 102 241 / 8%); }
+.demo-stat-card figcaption { font-size: 0.8rem; opacity: 0.7; }
+.demo-stat-card strong { font-size: 1.6rem; line-height: 1.2; }
+.demo-stat-card span { font-size: 0.85rem; opacity: 0.8; }
+/* Answer components appear without Markora's editing frame. */
+[data-byok="markdown"] .mdw-component { border: 0; background: none; margin-block: 0.75em; }
+[data-byok="markdown"] .mdw-component-header { display: none; }
+[data-byok="markdown"] .mdw-component-preview { padding: 0; }

