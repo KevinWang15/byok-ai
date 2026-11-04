@@ -3,16 +3,14 @@ import { createPortal } from 'react-dom'
 import { useAuiState } from '@assistant-ui/react'
 import { createEditor, type MarkdownEditor } from 'markora'
 import { createComponentRegistry, createComponentsExtension, defineComponent, type ComponentRegistry } from 'markora-extension-components'
-import 'markora/styles.css'
-import 'markora-extension-components/styles.css'
 import { checkAnswerComponents, splitOpenComponent, type AnswerComponent } from './answer-components'
 import { useAskAIOptional } from './context'
 
 // Answers rendered by Markora (read only): GitHub-flavored Markdown plus the host's answer
 // components (answer-components.ts). Raw HTML shows as text. Images are never loaded: tool results
 // can carry text other people wrote, so an answer could be steered into an image whose address
-// carries the user's data to another site, and loading it would send it without a click. Markora's
-// own stylesheets come with it; they are scoped to its element.
+// carries the user's data to another site, and loading it would send it without a click. Like the
+// rest of the library it imports no CSS: the host imports Markora's stylesheets (README).
 
 export interface MarkdownProps {
   markdown: string
