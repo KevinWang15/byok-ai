@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { useAuiState } from '@assistant-ui/react'
 import { createEditor, type MarkdownEditor } from 'markora'
@@ -38,6 +38,11 @@ const MESSAGES = {
   renderFailed: 'This part of the answer could not be drawn.',
 }
 const NO_COMPONENTS: readonly AnswerComponent[] = []
+// Markora's defaults are an editor's: a bordered box at least 180 px tall. An answer is text
+// on the page. These are Markora's own variables; hosts can set them again.
+const READING = {
+  '--mdw-editor-min-block-size': '0', '--mdw-editor-padding': '0', '--mdw-border-width': '0', '--mdw-editor-radius': '0',
+} as CSSProperties
 
 type Mount = { id: number; element: HTMLElement; component: AnswerComponent; props: Record<string, unknown> }
 
@@ -57,7 +62,8 @@ export function Markdown({ markdown, components: given, streaming = false, onOpe
     const created = createComponentRegistry([])
     registry.current = created
     const instance = createEditor({
-      element: host.current!, markdown: '', editable: false, ariaLabel: label,
+      // A finished text to read, not a text box: no tab stop of its own; links stay focusable.
+      element: host.current!, markdown: '', editable: false, ariaLabel: label, attributes: { role: 'document', tabindex: '-1' },
       extensions: [createComponentsExtension({ registry: created, messages: MESSAGES })],
       messages: { imageBlockedByPolicy: 'Image not shown' },
       // The image stays in the answer, as a placeholder with its description; nothing is fetched.
@@ -116,7 +122,7 @@ export function Markdown({ markdown, components: given, streaming = false, onOpe
     if (anchor && host.current?.contains(anchor)) onOpenLink?.(anchor.getAttribute('href') ?? '', event)
   }
 
-  return <div data-byok="markdown" className={className} onClick={onClick}>
+  return <div data-byok="markdown" className={className} style={READING} onClick={onClick}>
     <div ref={host} />
     {pending && <p data-byok="markdown-pending" role="status">{pendingLabel ?? pending}…</p>}
     {mounts.map(({ id, element, component, props }) => {
