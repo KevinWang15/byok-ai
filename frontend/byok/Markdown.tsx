@@ -19,10 +19,16 @@ export interface MarkdownProps {
   /** While true, a component whose fence is still open shows as pending instead of half-written. */
   streaming?: boolean
   /**
-   * Called when a link in the answer is clicked, with its address as written (Markora has already
-   * dropped scripts and other unsafe schemes). Call `event.preventDefault()` to handle it yourself:
-   * in-app navigation, a new tab, or nothing for an address you don't trust. Default: the browser
-   * follows it.
+   * Where a link in the answer goes: given its address as written (Markora has already dropped
+   * scripts and other unsafe schemes), the address it opens, or null for none (its text stays, not
+   * a link). The anchor carries this address, so a click, a middle-click, "Open in new tab" and the
+   * status bar all agree. Read when a link renders. Default: the address as written.
+   */
+  resolveLink?: (href: string) => string | null
+  /**
+   * Called when a link in the answer is clicked, with the address it opens (`resolveLink`). Call
+   * `event.preventDefault()` to handle it yourself, such as in-app navigation. Default: the browser
+   * follows it. Ctrl/Cmd-click is Markora's: it opens the address in a new tab, without this call.
    */
   onOpenLink?: (href: string, event: MouseEvent<HTMLElement>) => void
   className?: string
@@ -44,7 +50,7 @@ const READING = {
 
 type Mount = { id: number; element: HTMLElement; component: AnswerComponent; props: Record<string, unknown> }
 
-export function Markdown({ markdown, components: given, streaming = false, onOpenLink, className, label = 'Answer' }: MarkdownProps) {
+export function Markdown({ markdown, components: given, streaming = false, resolveLink, onOpenLink, className, label = 'Answer' }: MarkdownProps) {
   const fromProvider = useAskAIOptional()?.answerComponents
   const components = given ?? fromProvider ?? NO_COMPONENTS
   const host = useRef<HTMLDivElement>(null)
@@ -54,6 +60,9 @@ export function Markdown({ markdown, components: given, streaming = false, onOpe
   const mountId = useRef(0)
   const { shown, pending } = useMemo(() => streaming ? splitOpenComponent(markdown) : { shown: markdown, pending: null }, [markdown, streaming])
   const pendingLabel = pending && components.find(component => component.name === pending)?.label
+  // The latest resolveLink, for the editor made once below (declared first, so set first).
+  const linkResolver = useRef(resolveLink)
+  useLayoutEffect(() => { linkResolver.current = resolveLink })
 
   // One editor for the element's life; the text and components change through it.
   useLayoutEffect(() => {
@@ -65,7 +74,11 @@ export function Markdown({ markdown, components: given, streaming = false, onOpe
       extensions: [createComponentsExtension({ registry: created, messages: MESSAGES })],
       messages: { imageBlockedByPolicy: 'Image not shown' },
       // The image stays in the answer, as a placeholder with its description; nothing is fetched.
-      resources: { resolveUrl: ({ kind, url }) => kind === 'image' ? null : url, loadImage: () => null },
+      // A link goes where the host resolves it.
+      resources: {
+        resolveUrl: ({ kind, url }) => kind === 'image' ? null : linkResolver.current ? linkResolver.current(url) : url,
+        loadImage: () => null,
+      },
     })
     editor.current = instance
     return () => {
@@ -114,8 +127,10 @@ export function Markdown({ markdown, components: given, streaming = false, onOpe
   }, [shown, streaming])
   useEffect(() => () => { cancelAnimationFrame(frame.current); frame.current = 0 }, [])
 
-  // Read-only links are plain anchors: the host decides where a click goes.
+  // Read-only links are plain anchors to their resolved address: the host decides where a click
+  // goes. A click Markora already handled (Ctrl/Cmd-click) is not the host's.
   const onClick = (event: MouseEvent<HTMLElement>) => {
+    if (event.defaultPrevented) return
     const anchor = (event.target as Element).closest?.('a[href]')
     if (anchor && host.current?.contains(anchor)) onOpenLink?.(anchor.getAttribute('href') ?? '', event)
   }

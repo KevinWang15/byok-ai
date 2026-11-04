@@ -64,9 +64,11 @@ function SharedConnectionExample() {
     </div>
   </section>
 }
-// Links in these answers open in a new tab, so the conversation stays on the page.
+// Links in these answers go to https sites only (anything else stays text), in a new tab, so the
+// conversation stays on the page.
+const httpsOnly = (href: string) => href.startsWith('https://') ? href : null
 function CustomMarkdownText() {
-  return <MarkdownText className="demo-custom-markdown" onOpenLink={(href, event) => {
+  return <MarkdownText className="demo-custom-markdown" resolveLink={httpsOnly} onOpenLink={(href, event) => {
     event.preventDefault()
     window.open(href, '_blank', 'noopener,noreferrer')
   }} />

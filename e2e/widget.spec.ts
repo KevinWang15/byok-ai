@@ -228,7 +228,7 @@ test('Markdown renders safely, in the default renderer and a custom one', async 
     '## Markdown works', '', '**Strong text** and *emphasis* with ~~removed~~.', '', '- First item', '- Second item', '',
     '- [x] Task done', '', '| Name | Value |', '| --- | --- |', '| Example | 42 |', '',
     '[Documentation](https://example.com/docs)', '', '`inline code`', '', '```ts', 'const answer = 42;', '```', '',
-    '<script>window.__markdownExecuted = true</script>', '', '[Unsafe](javascript:alert(1))',
+    '<script>window.__markdownExecuted = true</script>', '', '[Unsafe](javascript:alert(1))', '', '[Plain web](http://example.com/plain)',
   ].join('\n')
   const saved = { conversations: [conversation('markdown', 'Markdown test', [text('answer', 'assistant', markdown)])], activeConversationId: 'markdown' }
   await seed(page, { keys: {
@@ -237,9 +237,13 @@ test('Markdown renders safely, in the default renderer and a custom one', async 
   } })
   await page.route('https://example.com/**', route => route.fulfill({ status: 200, body: 'docs' }))
   await page.goto('/')
-  // The custom renderer's links open a new tab, leaving the conversation where it is.
+  // The custom renderer's links open a new tab, leaving the conversation where it is. Its
+  // resolveLink keeps https links only: the http one is text, with no address to open.
   const custom = page.getByRole('region', { name: 'Custom headless example' })
   await expect(custom.getByRole('heading', { name: 'Markdown works', level: 2 })).toBeVisible()
+  await expect(custom.getByText('Plain web')).toBeVisible()
+  await expect(custom.getByRole('link', { name: 'Plain web' })).toHaveCount(0)
+  await expect(custom.getByRole('link', { name: 'Documentation' })).toHaveAttribute('href', 'https://example.com/docs')
   const popup = page.waitForEvent('popup')
   await custom.getByRole('link', { name: 'Documentation' }).click()
   expect((await popup).url()).toBe('https://example.com/docs')
@@ -254,6 +258,7 @@ test('Markdown renders safely, in the default renderer and a custom one', async 
   await expect(dialog.getByText('Task done')).toBeVisible()
   await expect(dialog.locator('pre').filter({ hasText: 'const answer = 42;' })).toHaveCount(1)
   await expect(dialog.getByRole('link', { name: 'Documentation' })).toHaveAttribute('href', 'https://example.com/docs')
+  await expect(dialog.getByRole('link', { name: 'Plain web' })).toHaveAttribute('href', 'http://example.com/plain')
   await expect(dialog.locator('script')).toHaveCount(0)
   await expect(dialog.locator('a[href^="javascript:"]')).toHaveCount(0)
   expect(await page.evaluate(() => '__markdownExecuted' in window)).toBe(false)
