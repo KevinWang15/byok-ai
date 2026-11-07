@@ -37,9 +37,10 @@ export async function toModelMessages(messages: readonly ThreadMessage[], images
       if (part.type === 'text') output.push({ role: 'assistant', content: part.text })
       if (part.type === 'tool-call') {
         output.push({ role: 'assistant', content: [{ type: 'tool-call', toolCallId: part.toolCallId, toolName: part.toolName, input: part.args }] })
+        // As the AI SDK gives a result to the model in the turn it ran: a string as it is, anything else as JSON.
         output.push({ role: 'tool', content: [{
           type: 'tool-result', toolCallId: part.toolCallId, toolName: part.toolName,
-          output: { type: 'text', value: part.result === undefined ? 'Tool execution was interrupted. No result is available.' : JSON.stringify(part.result) },
+          output: { type: 'text', value: part.result === undefined ? 'Tool execution was interrupted. No result is available.' : typeof part.result === 'string' ? part.result : JSON.stringify(part.result) },
         }] })
       }
     }

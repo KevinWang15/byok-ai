@@ -144,6 +144,16 @@ test('client tools run in the page beside MCP tools; names with "__" are refused
     values: {}, servers: [], clientTools: () => ({ a__b: clientTools.set_title }), systemPrompt: '', maxSteps: 1, onError: e => errors.push(e) })
   await assert.rejects(async () => { for await (const _ of bad.run(runOptions()) as AsyncGenerator<ChatModelRunResult>) { void _ } })
 })
+test('later turns see a tool\'s result as the model first did: a string as it is, anything else as JSON', async () => {
+  const assistant = { role: 'assistant', content: [
+    { type: 'tool-call', toolCallId: 'a', toolName: 'read', args: {}, argsText: '{}', result: 'Line "one"\nLine two' },
+    { type: 'tool-call', toolCallId: 'b', toolName: 'count', args: {}, argsText: '{}', result: { lines: 2 } },
+  ] } as unknown as ThreadMessage
+  const results = (await toModelMessages([user, assistant])).filter(message => message.role === 'tool')
+  const value = (index: number) => ((results[index]!.content as { output: { value: unknown } }[])[0]!.output.value)
+  assert.equal(value(0), 'Line "one"\nLine two')
+  assert.equal(value(1), '{"lines":2}')
+})
 test('interrupted tool calls always get a matching result in subsequent history', async () => {
   const assistant = { role: 'assistant', content: [{ type: 'tool-call', toolCallId: 'c', toolName: 'tool', args: {}, argsText: '{}' }] } as unknown as ThreadMessage
   const result = await toModelMessages([user, assistant])
