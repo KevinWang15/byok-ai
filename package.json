@@ -1,6 +1,6 @@
 {
   "name": "@kevinwang15/byok-ai",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "An embeddable AI assistant for React apps where users bring their own API key: a browser-side agent loop with tools from your MCP servers and the page.",
   "license": "MIT",
   "author": "Kevin Wang",
@@ -28,6 +28,18 @@
     ".": {
       "types": "./dist/lib/index.d.ts",
       "import": "./dist/lib/index.js"
+    },
+    "./agent": {
+      "types": "./dist/lib/entries/agent.d.ts",
+      "import": "./dist/lib/agent.js"
+    },
+    "./connection": {
+      "types": "./dist/lib/entries/connection.d.ts",
+      "import": "./dist/lib/connection.js"
+    },
+    "./script-engine": {
+      "types": "./dist/lib/entries/script-engine.d.ts",
+      "import": "./dist/lib/script-engine.js"
     }
   },
   "files": [

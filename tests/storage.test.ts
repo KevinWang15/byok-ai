@@ -1,9 +1,7 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import {
-  isEmptyConversation, loadConnection, loadConversations, newConversation, sameConnection, saveConnection, saveConversations,
-  subscribeConnection, type StoredConversations,
-} from '../frontend/byok/storage'
+import { isEmptyConversation, loadConversations, newConversation, saveConversations, type StoredConversations } from '../frontend/byok/storage'
+import { loadConnection, sameConnection, saveConnection, subscribeConnection } from '../frontend/byok/connection'
 
 let items: Map<string, string>
 const windowListeners = new Map<string, Set<(event: { key: string | null }) => void>>()

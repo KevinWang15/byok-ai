@@ -34,6 +34,16 @@ export function Page() {
 }
 ```
 
+The package has three more entries, for code that runs the assistant's parts without its React UI:
+
+| Import | Holds |
+| --- | --- |
+| `@kevinwang15/byok-ai/agent` | The agent loop without React: `createBrowserAdapter`, `answerComponentInstructions`, `memoryConversationFiles` (a workspace kept in memory), the limits and the types. For a job in the page that answers without a chat, a worker, or Node (evaluations, tests). Outside a page, give MCP servers absolute URLs. |
+| `@kevinwang15/byok-ai/connection` | The saved provider connection, to read and follow without loading React or the agent: `loadConnection(key)`, `subscribeConnection(key, listener)`, `sameConnection(a, b)` and `defaultConnectionKey(storageKey)`. |
+| `@kevinwang15/byok-ai/script-engine` | `inProcessScriptRunner`, which runs workspace scripts in the calling thread, for Node, where there are no workers. Pass it as `workspace.run` to `createBrowserAdapter`. The engine is bundled into this entry alone. A run ends at the time limit, but Stop can't end it sooner. |
+
+The main entry also exports the `agent` and `connection` names (not `inProcessScriptRunner`, to keep the engine out of it), and code shared between entries is loaded once: a connection change saved by an assistant reaches `subscribeConnection` from either entry.
+
 `AskAI` renders a trigger button and a modal dialog with provider setup, chat, history and a tools list. On a page that does not otherwise use React, mount it into an element:
 
 ```ts

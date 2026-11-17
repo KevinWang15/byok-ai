@@ -1,11 +1,10 @@
 import type { ThreadMessage } from '@assistant-ui/react'
-import type { ProviderValues } from './types'
 import { isImageId } from './conversation-files'
 import { isPageElementId, PAGE_ELEMENT_TYPE } from './page-context'
+import { isRecord, readStored, writeStored } from './local-storage'
 
-// What the library saves in localStorage, under two keys:
-// - the conversations key (`storageKey`): the conversations and which one is open;
-// - the connection key (`connectionKey`): the chosen provider and its form values, API key included.
+// The conversations, saved in localStorage under the conversations key (`storageKey`): the
+// conversations and which one is open. The provider connection has its own key (connection.ts).
 // Records that don't have this shape are skipped, never repaired. Nothing here logs.
 
 export interface Conversation {
@@ -19,10 +18,8 @@ export interface StoredConversations {
   conversations: Conversation[]
   activeConversationId?: string
 }
-export interface StoredConnection { providerId: string; values: ProviderValues }
 
 export const DEFAULT_STORAGE_KEY = 'byok-ai:conversations'
-export const defaultConnectionKey = (storageKey: string) => `${storageKey}:connection`
 
 // Ids from getRandomValues: crypto.randomUUID exists only in secure contexts (HTTPS or localhost).
 function randomId(): string {
@@ -35,8 +32,6 @@ export function newConversation(id = randomId()): Conversation {
 export const isEmptyConversation = (conversation: Pick<Conversation, 'messages' | 'draft'>) =>
   conversation.messages.length === 0 && !conversation.draft.trim()
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 // A sent image: its bytes are in the conversation's image store, under its id (images.ts).
 const isSavedImage = (value: unknown) => isRecord(value) && value.type === 'image' && typeof value.id === 'string' && isImageId(value.id) &&
@@ -66,20 +61,9 @@ function readConversation(value: unknown): Conversation | undefined {
   return { id: value.id, title: value.title, updatedAt: value.updatedAt, draft: value.draft, messages: messages as ThreadMessage[] }
 }
 
-function read(key: string): { value: unknown; error: boolean } {
-  try { return { value: JSON.parse(localStorage.getItem(key) ?? 'null'), error: false } } catch { return { value: null, error: true } }
-}
-function write(key: string, value: unknown): boolean {
-  try {
-    if (value === undefined) localStorage.removeItem(key)
-    else localStorage.setItem(key, JSON.stringify(value))
-    return true
-  } catch { return false }
-}
-
 /** The saved conversations; `error` when storage is unreadable or holds something else. */
 export function loadConversations(key: string): { data: StoredConversations; error: boolean } {
-  const { value, error } = read(key)
+  const { value, error } = readStored(key)
   if (value === null) return { data: { conversations: [] }, error }
   if (!isRecord(value) || !Array.isArray(value.conversations)) return { data: { conversations: [] }, error: true }
   return { data: {
@@ -88,41 +72,5 @@ export function loadConversations(key: string): { data: StoredConversations; err
   }, error: false }
 }
 export function saveConversations(key: string, data: StoredConversations): boolean {
-  return write(key, data)
-}
-
-export function loadConnection(key: string): StoredConnection | undefined {
-  const { value } = read(key)
-  if (!isRecord(value) || typeof value.providerId !== 'string' || !isRecord(value.values)) return
-  if (!Object.values(value.values).every(v => typeof v === 'string')) return
-  return { providerId: value.providerId, values: value.values as ProviderValues }
-}
-/** Saves the connection, or removes it when `connection` is undefined, and tells the others. */
-export function saveConnection(key: string, connection: StoredConnection | undefined): boolean {
-  const saved = write(key, connection)
-  for (const listener of connectionListeners.get(key) ?? []) listener()
-  return saved
-}
-
-// Assistants that share a connection key follow each other's connect and disconnect: in this tab
-// through these listeners, in other tabs through the storage event.
-const connectionListeners = new Map<string, Set<() => void>>()
-/** Calls `listener` after the connection under `key` may have changed. Returns the unsubscribe. */
-export function subscribeConnection(key: string, listener: () => void): () => void {
-  const listeners = connectionListeners.get(key) ?? new Set()
-  listeners.add(listener)
-  connectionListeners.set(key, listeners)
-  const onStorage = (event: StorageEvent) => { if (event.key === key || event.key === null) listener() }
-  window.addEventListener('storage', onStorage)
-  return () => {
-    listeners.delete(listener)
-    if (!listeners.size) connectionListeners.delete(key)
-    window.removeEventListener('storage', onStorage)
-  }
-}
-/** Whether two saved connections are the same provider with the same values. */
-export function sameConnection(a: StoredConnection | undefined, b: StoredConnection | undefined): boolean {
-  if (!a || !b) return a === b
-  const keys = Object.keys(a.values)
-  return a.providerId === b.providerId && keys.length === Object.keys(b.values).length && keys.every(key => a.values[key] === b.values[key])
+  return writeStored(key, data)
 }

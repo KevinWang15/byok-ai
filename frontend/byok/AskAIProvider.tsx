@@ -10,10 +10,8 @@ import { imageAttachmentAdapter, isImageAttachment } from './images'
 import { isPageElementAttachment, PAGE_CONTEXT_LIMITS, PAGE_ELEMENT_TYPE, pageElementRegistry, type PageElementRegistry } from './page-context'
 import { pickPageElement } from './page-picker'
 import { workerScriptRunner } from './script-runner'
-import {
-  DEFAULT_STORAGE_KEY, defaultConnectionKey, isEmptyConversation, loadConnection, loadConversations, newConversation,
-  sameConnection, saveConnection, saveConversations, subscribeConnection, type Conversation, type StoredConnection, type StoredConversations,
-} from './storage'
+import { DEFAULT_STORAGE_KEY, isEmptyConversation, loadConversations, newConversation, saveConversations, type Conversation, type StoredConversations } from './storage'
+import { defaultConnectionKey, loadConnection, sameConnection, saveConnection, subscribeConnection, type StoredConnection } from './connection'
 import type { AskAIProviderProps, McpServerConfig, ProviderPreset, ProviderValues } from './types'
 
 const EMPTY_SERVERS: McpServerConfig[] = []
