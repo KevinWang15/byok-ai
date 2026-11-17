@@ -1,5 +1,5 @@
 // What a host writes in its markup for page context (page-context.ts): the attribute names, the
-// shape of a data-ai-context-source, and the function that builds the attributes. Nothing else,
+// shape of a data-ai-context-source, and the functions that build the attributes. Nothing else,
 // and no imports, so the pages that carry the attributes load nothing of the assistant with them.
 
 /** How a reader calls MCP tools: by full name (`serverId__toolName`), with an object of arguments. */
@@ -29,10 +29,15 @@ export type PageSource = McpSource | ReaderSource | { [part: string]: PageSource
 export type PageReader = (args: unknown, context: { element: Element; mcp: McpCall; signal?: AbortSignal }) => unknown
 export type PageReaders = Readonly<Record<string, PageReader>>
 
-/** The attributes pageContextAttributes builds, to spread on the element. */
-export type PageContextAttributes = { [PAGE_CONTEXT_ATTRIBUTES.description]: string; [PAGE_CONTEXT_ATTRIBUTES.source]?: string }
+/** The attributes pageContextAttributes and pageContextData build, to spread on the element. */
+export type PageContextAttributes = { [PAGE_CONTEXT_ATTRIBUTES.description]: string; [PAGE_CONTEXT_ATTRIBUTES.data]?: string; [PAGE_CONTEXT_ATTRIBUTES.source]?: string }
 
 /** The attributes for an element that can be added, with its data at `source`: spread them on it. */
 export function pageContextAttributes(description: string, source?: PageSource): PageContextAttributes {
   return { [PAGE_CONTEXT_ATTRIBUTES.description]: description, ...(source === undefined ? {} : { [PAGE_CONTEXT_ATTRIBUTES.source]: JSON.stringify(source) }) }
+}
+
+/** The attributes for an element that can be added, with its data as text in the markup: for small data. */
+export function pageContextData(description: string, data: string): PageContextAttributes {
+  return { [PAGE_CONTEXT_ATTRIBUTES.description]: description, [PAGE_CONTEXT_ATTRIBUTES.data]: data }
 }

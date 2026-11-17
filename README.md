@@ -180,7 +180,7 @@ Elements can nest, and any of them can be added: the inner one, the outer one, o
 
 A click on the highlighted element or on the label's description, or Enter, adds the highlighted element. Escape or a right-click cancels. A message holds up to 8 (`PAGE_CONTEXT_LIMITS`). The composer shows "2 elements", which opens their list with remove buttons. Each one is marked on the page with a border, and a remove button at its top right, while the composer is visible.
 
-Only elements the host describes can be added. Any framework can write the attributes (`PAGE_CONTEXT_ATTRIBUTES`), and `pageContextAttributes(description, source)` builds them:
+Only elements the host describes can be added. Any framework can write the attributes (`PAGE_CONTEXT_ATTRIBUTES`); `pageContextAttributes(description, source)` and `pageContextData(description, text)` build them:
 
 | Attribute | Holds |
 | --- | --- |
@@ -199,14 +199,14 @@ A source is data, never code. It is one of:
 An object is a call when its keys are `mcp` (a string) and maybe `params`, or `reader` (a string) and maybe `args`; any other object holds parts. All of a source's calls start together. A part that fails becomes `{ "error": "…" }` in its place, so the other parts still arrive. A source that is one call fails as a whole. A read may take 60 seconds, its calls included, and Stop stops the answer from waiting for it.
 
 ```tsx
-import { pageContextAttributes } from '@kevinwang15/byok-ai'
+import { pageContextAttributes, pageContextData } from '@kevinwang15/byok-ai'
 
 <section {...pageContextAttributes(`Overview, ${rangeName}`, {
   totals: { mcp: 'stats__overview', params },
   byModel: { mcp: 'stats__breakdown', params: { ...params, dimension: 'model' } },
   selection: { reader: 'selectedRows', args: { table: 'models' } },
 })}>…</section>
-<span {...pageContextAttributes('Selected team')} data-ai-context-data={team.name}>{team.name}</span>
+<span {...pageContextData('Selected team', team.name)}>{team.name}</span>
 ```
 
 A reader is a function in your code, passed as `pageReaders`: `(args, { element, mcp, signal }) => value`. It gets the source's `args`, the element being read, `mcp(name, params)` for tool calls of its own, and the answer's abort signal, and may return a promise. Each read uses the latest `pageReaders` given. A source naming a reader the page doesn't offer says so.

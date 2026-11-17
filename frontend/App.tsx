@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MessagePrimitive, ThreadPrimitive } from '@assistant-ui/react'
-import { AskAIProvider, MarkdownText, pageContextAttributes, useAskAI } from './byok'
+import { AskAIProvider, MarkdownText, pageContextAttributes, pageContextData, useAskAI } from './byok'
 
 import { DEMO_COMPONENTS } from './demo/components'
 import { DemoAssistant } from './demo/DemoAssistant'
@@ -130,14 +130,14 @@ export function YourPage() {
           The section has only its description. Of the steps, the first carries its data in the
           markup; the second's source is a call of the demo's MCP server, and the third's a reader of
           the page's: both run when the model reads them. */}
-      <section id="how-it-works" className="demo-features" aria-label="How it works" data-ai-context="How it works: the three steps of using byok-ai">
-        <article data-ai-context="How it works, step 1: choose a provider" data-ai-context-data="Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials."><span className="demo-feature-number">01</span><div><h2>Choose a provider.</h2><p>Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials.</p></div></article>
+      <section id="how-it-works" className="demo-features" aria-label="How it works" {...pageContextAttributes('How it works: the three steps of using byok-ai')}>
+        <article {...pageContextData('How it works, step 1: choose a provider', 'Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials.')}><span className="demo-feature-number">01</span><div><h2>Choose a provider.</h2><p>Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials.</p></div></article>
         <article {...pageContextAttributes('How it works, step 2: connect MCP tools. Its data is what the docs say about MCP.', { mcp: 'docs__search_docs', params: { query: 'MCP' } })}><span className="demo-feature-number">02</span><div><h2>Connect MCP tools.</h2><p>The browser-side agent discovers and calls tools exposed by your backend.</p></div></article>
         <article {...pageContextAttributes('How it works, step 3: resume saved conversations', { reader: 'storedKeys' })}><span className="demo-feature-number">03</span><div><h2>Resume saved conversations.</h2><p>Provider settings, API keys, conversation history, and drafts are stored in localStorage.</p></div></article>
       </section>
       <section className="demo-integration" id="integration">
         <div><span className="demo-eyebrow">UNSTYLED CORE · COMPOSABLE UI</span><h2>Style and compose<br />the chat interface.</h2><p>Reuse provider setup, chat, history, and tool rendering, or supply your own components. The core ships without CSS.</p><a href="#sandbox">Try the headless example <DemoIcon name="arrow" /></a></div>
-        <div className="demo-code" data-ai-context="The integration code example, YourPage.tsx" data-ai-context-data={snippet}><div className="demo-code-header"><span><span className="demo-code-dot" /> YourPage.tsx</span><button onClick={async () => { try { await navigator.clipboard.writeText(snippet); setCopied(true); setCopyError(false) } catch { setCopyError(true) } }}>{copied ? 'Copied ✓' : 'Copy code'}</button></div><pre><code>{snippet}</code></pre>{copyError && <p role="status">Select the code above to copy it.</p>}<div className="demo-code-foot">React · assistant-ui · Vercel AI SDK · Headless UI</div></div>
+        <div className="demo-code" {...pageContextData('The integration code example, YourPage.tsx', snippet)}><div className="demo-code-header"><span><span className="demo-code-dot" /> YourPage.tsx</span><button onClick={async () => { try { await navigator.clipboard.writeText(snippet); setCopied(true); setCopyError(false) } catch { setCopyError(true) } }}>{copied ? 'Copied ✓' : 'Copy code'}</button></div><pre><code>{snippet}</code></pre>{copyError && <p role="status">Select the code above to copy it.</p>}<div className="demo-code-foot">React · assistant-ui · Vercel AI SDK · Headless UI</div></div>
       </section>
       <AskAIProvider mcpServers={servers} storageKey="byok-ai:headless-demo"><HeadlessExample /></AskAIProvider>
       <SharedConnectionExample />

@@ -4,7 +4,7 @@ import { mcpValue } from './mcp-result'
 import { PAGE_CONTEXT_ATTRIBUTES, type McpCall, type PageReaders } from './page-source'
 import { SAVED_RESULT, WORKSPACE_ID, type SavableTool } from './workspace-tools'
 
-export { PAGE_CONTEXT_ATTRIBUTES, pageContextAttributes } from './page-source'
+export { PAGE_CONTEXT_ATTRIBUTES, pageContextAttributes, pageContextData } from './page-source'
 export type { McpCall, McpSource, PageContextAttributes, PageReader, PageReaders, PageSource, ReaderSource } from './page-source'
 
 // Page context (the `pageContext` option): the user adds elements of the page to a message, and

@@ -7,7 +7,7 @@ import type { ChatModelRunOptions, ChatModelRunResult, ThreadMessage } from '@as
 import { createApp } from '../backend/app'
 import { createBrowserAdapter, toModelMessages } from '../frontend/byok/agent'
 import {
-  declarationProblem, mcpCall, PAGE_CONTEXT_ATTRIBUTES as A, pageContextAttributes, PAGE_CONTEXT_LIMITS, PAGE_ELEMENT_TYPE, pageContextTools, pageElementRegistry, pageElementsIn,
+  declarationProblem, mcpCall, PAGE_CONTEXT_ATTRIBUTES as A, pageContextAttributes, pageContextData, PAGE_CONTEXT_LIMITS, PAGE_ELEMENT_TYPE, pageContextTools, pageElementRegistry, pageElementsIn,
   readPageElement, READ_ELEMENT_TOOL,
 } from '../frontend/byok/page-context'
 import { memoryConversationFiles } from '../frontend/byok/conversation-files'
@@ -201,8 +201,9 @@ test('a source is data: MCP calls, the host\'s readers and literal values, in pa
   assert.equal((globalThis as { pwned?: boolean }).pwned, false)
 })
 
-test('pageContextAttributes writes the description and the source as JSON', () => {
+test('pageContextAttributes writes the description and the source as JSON; pageContextData, text data', () => {
   assert.deepEqual(pageContextAttributes('Spend', { mcp: 'finops__totals', params: { measure: 'cost.billed' } }),
     { [A.description]: 'Spend', [A.source]: '{"mcp":"finops__totals","params":{"measure":"cost.billed"}}' })
   assert.deepEqual(pageContextAttributes('Just a label'), { [A.description]: 'Just a label' })
+  assert.deepEqual(pageContextData('Selected team', 'Platform'), { [A.description]: 'Selected team', [A.data]: 'Platform' })
 })
