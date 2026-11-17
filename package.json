@@ -1,6 +1,6 @@
 {
   "name": "@kevinwang15/byok-ai",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "An embeddable AI assistant for React apps where users bring their own API key: a browser-side agent loop with tools from your MCP servers and the page.",
   "license": "MIT",
   "author": "Kevin Wang",
@@ -69,7 +69,7 @@
     "@assistant-ui/react": "^0.15.32",
     "@headlessui/react": "^2.2.10",
     "ai": "^7.0.157",
-    "markora": "^0.1.4",
+    "markora": "^0.1.5",
     "markora-extension-components": "^0.0.4"
   },
   "dependencies": {
