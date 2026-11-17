@@ -53,6 +53,15 @@ export interface AskAIOptions {
    */
   images?: boolean
   /**
+   * Page context: lets the user add elements of the page to a message ("Add from page"), and the
+   * model read their data with the `page__read_element` tool. Only elements the host describes
+   * with a `data-ai-context` attribute can be added; `data-ai-context-data` holds an element's data
+   * as text, or `data-ai-context-read` a JavaScript expression evaluated in the page (with
+   * `MCP(name, params)` and `element` in scope) when the model reads it (page-context.ts). The tools
+   * are named `page__…`, so no MCP server may use the id "page". Default false.
+   */
+  pageContext?: boolean
+  /**
    * Components the model may place in its answers, such as charts: it writes a
    * ```component:<name>``` fence with JSON props, and the default Markdown renders the host's
    * component there (answer-components.ts). The model is told about them unless

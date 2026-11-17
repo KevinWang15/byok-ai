@@ -15,7 +15,7 @@ const userWith = (attachments: unknown[], text = 'What is in this?') =>
 test('a user message with images becomes text and image parts, in order', async () => {
   const store = memoryConversationFiles().images('c')
   await store.save(ID, new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }))
-  const [message] = await toModelMessages([userWith([sent()])], { store, accepted: true })
+  const [message] = await toModelMessages([userWith([sent()])], { images: { store, accepted: true } })
   assert.equal(message.role, 'user')
   const content = message.content as { type: string; text?: string; image?: Uint8Array; mediaType?: string }[]
   assert.deepEqual(content.map(p => p.type), ['text', 'image'])
@@ -23,13 +23,13 @@ test('a user message with images becomes text and image parts, in order', async 
   assert.deepEqual([...content[1].image!], [137, 80, 78, 71])
   assert.equal(content[1].mediaType, 'image/png')
   // Without images, a message stays plain text.
-  assert.deepEqual(await toModelMessages([userWith([])], { store, accepted: true }), [{ role: 'user', content: 'What is in this?' }])
+  assert.deepEqual(await toModelMessages([userWith([])], { images: { store, accepted: true } }), [{ role: 'user', content: 'What is in this?' }])
 })
 
 test('an image the model cannot see is a note: not accepted, or no longer stored', async () => {
   const store = memoryConversationFiles().images('c')
   await store.save(ID, new Blob(['x'], { type: 'image/png' }))
-  const text = async (accepted: boolean, id = ID) => JSON.stringify(await toModelMessages([userWith([sent(id)], '')], { store, accepted }))
+  const text = async (accepted: boolean, id = ID) => JSON.stringify(await toModelMessages([userWith([sent(id)], '')], { images: { store, accepted } }))
   assert.match(await text(false), new RegExp(IMAGE_NOTES.unsupported))
   assert.match(await text(true, 'b'.repeat(32)), new RegExp(IMAGE_NOTES.missing))
   assert.match(JSON.stringify(await toModelMessages([userWith([sent()])])), new RegExp(IMAGE_NOTES.unsupported), 'no store at all')

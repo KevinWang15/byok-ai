@@ -8,6 +8,11 @@ import { DemoIcon } from './demo/DemoIcon'
 
 const servers = [{ id: 'docs', name: 'Docs and time', url: '/api/mcp' }]
 
+// What step 3 of "How it works" reads when the model asks (data-ai-context-read): which
+// localStorage keys this page keeps, without their values.
+declare global { interface Window { byokDemo: { storedKeys: () => string[] } } }
+window.byokDemo = { storedKeys: () => Object.keys(localStorage).filter(key => key.startsWith('byok-ai:')).sort() }
+
 function HeadlessExample() {
   const { connection, providers, connect, disconnect, runtime, busy, error } = useAskAI()
   const [key, setKey] = useState('')
@@ -122,14 +127,18 @@ export function YourPage() {
           <div className="demo-floating-note"><span className="demo-status-dot" /> Bring your own API key</div>
         </div>
       </section>
-      <section id="how-it-works" className="demo-features" aria-label="How it works">
-        <article><span className="demo-feature-number">01</span><div><h2>Choose a provider.</h2><p>Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials.</p></div></article>
-        <article><span className="demo-feature-number">02</span><div><h2>Connect MCP tools.</h2><p>The browser-side agent discovers and calls tools exposed by your backend.</p></div></article>
-        <article><span className="demo-feature-number">03</span><div><h2>Resume saved conversations.</h2><p>Provider settings, API keys, conversation history, and drafts are stored in localStorage.</p></div></article>
+      {/* Page context: the section and each step in it can be added to a message, alone or together.
+          The section has only its description. Of the steps, the first carries its data in the
+          markup, the second reads the docs through the demo's MCP server, and the third calls a
+          function of the page, when the model reads them. */}
+      <section id="how-it-works" className="demo-features" aria-label="How it works" data-ai-context="How it works: the three steps of using byok-ai">
+        <article data-ai-context="How it works, step 1: choose a provider" data-ai-context-data="Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials."><span className="demo-feature-number">01</span><div><h2>Choose a provider.</h2><p>Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials.</p></div></article>
+        <article data-ai-context="How it works, step 2: connect MCP tools. Its data is what the docs say about MCP." data-ai-context-read={'MCP("docs__search_docs", { query: "MCP" }).then(text => JSON.parse(text))'}><span className="demo-feature-number">02</span><div><h2>Connect MCP tools.</h2><p>The browser-side agent discovers and calls tools exposed by your backend.</p></div></article>
+        <article data-ai-context="How it works, step 3: resume saved conversations" data-ai-context-read="byokDemo.storedKeys()"><span className="demo-feature-number">03</span><div><h2>Resume saved conversations.</h2><p>Provider settings, API keys, conversation history, and drafts are stored in localStorage.</p></div></article>
       </section>
       <section className="demo-integration" id="integration">
         <div><span className="demo-eyebrow">UNSTYLED CORE · COMPOSABLE UI</span><h2>Style and compose<br />the chat interface.</h2><p>Reuse provider setup, chat, history, and tool rendering, or supply your own components. The core ships without CSS.</p><a href="#sandbox">Try the headless example <DemoIcon name="arrow" /></a></div>
-        <div className="demo-code"><div className="demo-code-header"><span><span className="demo-code-dot" /> YourPage.tsx</span><button onClick={async () => { try { await navigator.clipboard.writeText(snippet); setCopied(true); setCopyError(false) } catch { setCopyError(true) } }}>{copied ? 'Copied ✓' : 'Copy code'}</button></div><pre><code>{snippet}</code></pre>{copyError && <p role="status">Select the code above to copy it.</p>}<div className="demo-code-foot">React · assistant-ui · Vercel AI SDK · Headless UI</div></div>
+        <div className="demo-code" data-ai-context="The integration code example, YourPage.tsx" data-ai-context-data={snippet}><div className="demo-code-header"><span><span className="demo-code-dot" /> YourPage.tsx</span><button onClick={async () => { try { await navigator.clipboard.writeText(snippet); setCopied(true); setCopyError(false) } catch { setCopyError(true) } }}>{copied ? 'Copied ✓' : 'Copy code'}</button></div><pre><code>{snippet}</code></pre>{copyError && <p role="status">Select the code above to copy it.</p>}<div className="demo-code-foot">React · assistant-ui · Vercel AI SDK · Headless UI</div></div>
       </section>
       <AskAIProvider mcpServers={servers} storageKey="byok-ai:headless-demo"><HeadlessExample /></AskAIProvider>
       <SharedConnectionExample />
@@ -139,5 +148,5 @@ export function YourPage() {
   </div>
 }
 export default function App() {
-  return <AskAIProvider mcpServers={servers} workspace images answerComponents={DEMO_COMPONENTS}><DemoContent /></AskAIProvider>
+  return <AskAIProvider mcpServers={servers} workspace images pageContext answerComponents={DEMO_COMPONENTS}><DemoContent /></AskAIProvider>
 }

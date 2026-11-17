@@ -828,7 +828,7 @@ test('at most four images go in a message, and an image that cannot be read says
   await expect(page.getByRole('alert')).toContainText('at most 4 images')
 })
 
-test('without private file storage (plain HTTP), there is no workspace and no attaching', async ({ page }) => {
+test('without private file storage (plain HTTP), there is no workspace and no attaching, but page context works', async ({ page }) => {
   // What a secure context provides and plain HTTP doesn't.
   await page.addInitScript(() => Object.defineProperty(navigator, 'storage', { configurable: true, value: undefined }))
   let tools: string[] = []
@@ -845,6 +845,16 @@ test('without private file storage (plain HTTP), there is no workspace and no at
   await expect(page.getByText('Hello.', { exact: true })).toBeVisible()
   expect(tools.length).toBeGreaterThan(0)
   expect(tools.filter(name => name.startsWith('workspace__'))).toEqual([])
+  // Page context keeps nothing in the browser, so it doesn't need private storage: with no image
+  // adapter, an element still goes with the message.
+  await page.getByRole('button', { name: 'Add from page', exact: true }).click()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Enter')
+  await messageBox(page).fill('And this?')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('Hello.', { exact: true })).toHaveCount(2)
+  expect(tools).toContain('page__read_element')
+  await expect(page.locator('[data-byok="message"][data-role="user"]').getByRole('button', { name: '1 element', exact: true })).toBeVisible()
 })
 
 test('an image written into an answer is described, never loaded', async ({ page }) => {
@@ -861,4 +871,263 @@ test('an image written into an answer is described, never loaded', async ({ page
   await expect(page.locator('[data-byok="markdown"] img[src]:not(.ProseMirror-separator)')).toHaveCount(0)
   await page.waitForTimeout(500)
   expect(fetched).toEqual([])
+})
+
+// Page context: elements of the page are chosen as a browser's inspector does, with the mouse or
+// the keyboard. The picker covers the page, so these move the mouse rather than click elements.
+const step = (page: Page, n: number) => page.locator('#how-it-works article').nth(n - 1)
+async function pickWithMouse(page: Page, target: ReturnType<Page['locator']>) {
+  await page.getByRole('button', { name: 'Add from page', exact: true }).click()
+  await expect(page.locator('[data-byok="page-picker"]')).toBeVisible()
+  // The wheel scrolls the page under the picker, as it does without it.
+  const viewport = page.viewportSize()!
+  await page.mouse.move(viewport.width / 2, viewport.height / 2)
+  const before = (await target.boundingBox())!
+  await page.mouse.wheel(0, before.y + before.height / 2 - viewport.height / 2)
+  await expect.poll(async () => Math.abs((await target.boundingBox())!.y + before.height / 2 - viewport.height / 2) < 40 || (await page.evaluate(() => scrollY + innerHeight >= document.documentElement.scrollHeight - 1))).toBe(true)
+  const box = (await target.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(page.locator('[data-byok="page-picker-description"]')).toHaveText((await target.getAttribute('data-ai-context'))!)
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(page.locator('[data-byok="page-picker"]')).toHaveCount(0)
+}
+
+test('elements chosen from the page go with the message, and the model reads them through MCP and the page\'s own code', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  const prompts: { role: string; content: unknown }[][] = []
+  await page.route(MODEL, route => {
+    const messages = route.request().postDataJSON().messages as { role: string; content: unknown }[]
+    prompts.push(messages)
+    if (prompts.length === 1) {
+      // The model reads every element listed in the message.
+      const ids = [...String(messages.find(m => m.role === 'user')!.content).matchAll(/^- ([a-f0-9]{32}):/gm)].map(match => match[1])
+      return route.fulfill(stream(
+        chunk({ role: 'assistant', tool_calls: ids.map((id, index) => ({ index, id: 'read-' + index, type: 'function', function: { name: 'page__read_element', arguments: JSON.stringify({ id }) } })) }),
+        chunk({}, 'tool_calls'),
+      ))
+    }
+    return route.fulfill(answer('Read: ' + messages.filter(m => m.role === 'tool').map(m => m.content).join(' | ')))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+
+  // The modal assistant steps aside while choosing, and comes back with the element added.
+  await page.getByRole('button', { name: 'Add from page', exact: true }).click()
+  await expect(page.getByRole('dialog', { name: 'Ask AI' })).toBeHidden()
+  await expect(page.locator('[data-byok="page-picker-hint"]')).toHaveText(/^5 elements on this page can be added\..*↑ and ↓ choose the outer or inner one\./)
+  await page.keyboard.press('Escape')
+  await expect(page.getByRole('dialog', { name: 'Ask AI' })).toBeVisible()
+  await expect(page.locator('[data-byok="page-elements"]')).toHaveCount(0)
+
+  await pickWithMouse(page, step(page, 1))
+  await expect(page.getByRole('button', { name: '1 element', exact: true })).toBeVisible()
+  // By keyboard: Tab goes through the elements in page order (the section, then its steps), Enter adds one.
+  await page.getByRole('button', { name: 'Add from page', exact: true }).click()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Tab')
+  await expect(page.locator('[data-byok="page-picker-description"]')).toHaveText(/^How it works, step 2/)
+  await page.keyboard.press('Enter')
+  await pickWithMouse(page, step(page, 3))
+  // Adding one twice adds it once.
+  await pickWithMouse(page, step(page, 1))
+  await expect(page.getByRole('button', { name: '3 elements', exact: true })).toBeVisible()
+  // Each is marked on the page while the composer shows them.
+  await expect(page.locator('[data-byok="page-mark"]:not([hidden])')).toHaveCount(3)
+  const mark = (await page.locator('[data-byok="page-mark"]').first().boundingBox())!
+  const element = (await step(page, 1).boundingBox())!
+  expect(Math.abs(mark.x - element.x) + Math.abs(mark.y - element.y) + Math.abs(mark.width - element.width)).toBeLessThan(2)
+
+  await page.getByRole('button', { name: '3 elements', exact: true }).click()
+  await page.getByRole('button', { name: 'Remove “How it works, step 3: resume saved conversations”', exact: true }).click()
+  await expect(page.getByRole('button', { name: '2 elements', exact: true })).toBeVisible()
+  await expect(page.locator('[data-byok="page-mark"]')).toHaveCount(2)
+
+  await messageBox(page).fill('What do these say?')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  const answerText = page.getByText(/^Read:/)
+  await expect(answerText).toContainText('Connect OpenAI, Anthropic, Gemini, or a compatible endpoint')
+  // Step 2 asked the docs MCP server for what they say about MCP.
+  await expect(answerText).toContainText('Streamable HTTP servers expose tools')
+  expect(String(prompts[0].find(m => m.role === 'user')!.content)).toMatch(/^What do these say\?\nThe user added 2 elements from the page/)
+  // Sent, they leave the composer and the page, and stay with the message.
+  await expect(page.locator('[data-byok="page-mark"]')).toHaveCount(0)
+  const sent = page.locator('[data-byok="message"][data-role="user"]').getByRole('button', { name: '2 elements', exact: true })
+  await expect(sent).toBeVisible()
+  await page.reload()
+  await openChat(page)
+  await expect(sent).toBeVisible()
+  await sent.click()
+  await expect(page.locator('[data-byok="message"][data-role="user"] [data-byok="page-element"] > span')).toHaveText(['How it works, step 1: choose a provider', /^How it works, step 2/])
+  expect(errors).toEqual([])
+})
+
+test('a page element\'s own code reads the page, and the model is told when an element is gone', async ({ page }) => {
+  const results: unknown[] = []
+  let ids: string[] = []
+  await page.route(MODEL, route => {
+    const messages = route.request().postDataJSON().messages as { role: string; content: unknown }[]
+    const tools = messages.filter(m => m.role === 'tool')
+    // Each question: one read, then the answer.
+    if (messages.at(-1)!.role === 'user') {
+      // The element added with the first question, read again for the second.
+      ids = [...String(messages.find(m => m.role === 'user')!.content).matchAll(/^- ([a-f0-9]{32}):/gm)].map(match => match[1])
+      return route.fulfill(stream(
+        chunk({ role: 'assistant', tool_calls: [{ index: 0, id: 'read-' + tools.length, type: 'function', function: { name: 'page__read_element', arguments: JSON.stringify({ id: ids[0] }) } }] }),
+        chunk({}, 'tool_calls'),
+      ))
+    }
+    results.push(...tools.map(m => m.content))
+    return route.fulfill(answer('Done.'))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  await pickWithMouse(page, step(page, 3))
+  await messageBox(page).fill('Which keys?')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByRole('button', { name: /Used connected tools/ })).toBeVisible()
+  // byokDemo.storedKeys() ran in the page.
+  await page.getByRole('button', { name: /Used connected tools/ }).click()
+  await page.getByRole('button', { name: /Read from the page/ }).click()
+  await expect(page.locator('.chat-tool-json')).toContainText('byok-ai:conversations:connection')
+
+  // The element leaves the page: the model reads why not.
+  await page.evaluate(() => document.querySelectorAll('#how-it-works article')[2].remove())
+  await messageBox(page).fill('Again?')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('Done.', { exact: true })).toHaveCount(2)
+  expect(String(results.at(-1))).toMatch(/no longer on the page/)
+})
+
+test('nested elements: the inner one under the pointer, the outer one by ↑ or the label, or both', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  const prompts: { role: string; content: unknown }[][] = []
+  await page.route(MODEL, route => {
+    const messages = route.request().postDataJSON().messages as { role: string; content: unknown }[]
+    prompts.push(messages)
+    if (prompts.length > 1) return route.fulfill(answer('Read: ' + messages.filter(m => m.role === 'tool').map(m => m.content).join(' | ')))
+    const ids = [...String(messages.find(m => m.role === 'user')!.content).matchAll(/^- ([a-f0-9]{32}):/gm)].map(match => match[1])
+    return route.fulfill(stream(
+      chunk({ role: 'assistant', tool_calls: ids.map((id, index) => ({ index, id: 'read-' + index, type: 'function', function: { name: 'page__read_element', arguments: JSON.stringify({ id }) } })) }),
+      chunk({}, 'tool_calls'),
+    ))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  const section = page.locator('#how-it-works')
+  const SECTION = 'How it works: the three steps of using byok-ai'
+  const described = page.locator('[data-byok="page-picker-description"]')
+  const outerButton = page.locator('[data-byok="page-picker-outer"]')
+  const innerButton = page.locator('[data-byok="page-picker-inner"]')
+  const highlight = page.locator('[data-byok="page-picker-highlight"]')
+  const same = async (a: ReturnType<Page['locator']>, b: ReturnType<Page['locator']>) => {
+    const [x, y] = [(await a.boundingBox())!, (await b.boundingBox())!]
+    return Math.abs(x.x - y.x) + Math.abs(x.y - y.y) + Math.abs(x.width - y.width) + Math.abs(x.height - y.height) < 3
+  }
+  const hover = async (target: ReturnType<Page['locator']>) => {
+    await page.getByRole('button', { name: 'Add from page', exact: true }).click()
+    const viewport = page.viewportSize()!
+    await page.mouse.move(viewport.width / 2, viewport.height / 2)
+    const before = (await target.boundingBox())!
+    await page.mouse.wheel(0, before.y + before.height / 2 - viewport.height / 2)
+    await expect.poll(async () => Math.abs((await target.boundingBox())!.y + before.height / 2 - viewport.height / 2) < 40).toBe(true)
+    const box = (await target.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    return box
+  }
+
+  // Under the pointer, the inner element. The label names it, with a button to the outer one only.
+  await hover(step(page, 3))
+  await expect(described).toHaveText('How it works, step 3: resume saved conversations')
+  await expect(outerButton).toBeVisible()
+  await expect(outerButton).toHaveAttribute('aria-label', `Outer: ${SECTION}`)
+  await expect(innerButton).toBeHidden()
+  await expect.poll(() => same(highlight, step(page, 3))).toBe(true)
+  // ↑ and ↓ move out and back in, and stop at the ends.
+  await page.keyboard.press('ArrowUp')
+  await expect(described).toHaveText(SECTION)
+  await expect.poll(() => same(highlight, section)).toBe(true)
+  await expect(outerButton).toBeHidden()
+  await expect(innerButton).toHaveAttribute('aria-label', 'Inner: How it works, step 3: resume saved conversations')
+  await page.keyboard.press('ArrowUp')
+  await expect(described).toHaveText(SECTION)
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('ArrowDown')
+  await expect(described).toHaveText(/step 3/)
+  // ↑ then Enter adds the outer one.
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: '1 element', exact: true })).toBeVisible()
+
+  // With the mouse alone: the label's ↑ goes out, ↓ back in, and a click on the label's
+  // description adds what is highlighted. The label stays put while its buttons are used. The
+  // section is in the message already, so this adds the step.
+  await hover(step(page, 2))
+  const at = (await page.locator('[data-byok="page-picker-label"]').boundingBox())!
+  await outerButton.click()
+  await expect(described).toHaveText(SECTION)
+  await expect.poll(() => same(highlight, section)).toBe(true)
+  expect(Math.abs((await page.locator('[data-byok="page-picker-label"]').boundingBox())!.y - at.y)).toBeLessThan(1)
+  await innerButton.click()
+  await expect(described).toHaveText(/^How it works, step 2/)
+  await described.click()
+  await expect(page.getByRole('button', { name: '2 elements', exact: true })).toBeVisible()
+
+  // Both are marked. The step's top is well below the section's, so both labels fit above them.
+  await expect(page.locator('[data-byok="page-mark"]:not([hidden])')).toHaveCount(2)
+  await expect(page.locator('[data-byok="page-mark"][data-nested]')).toHaveCount(1)
+  await expect(page.locator('[data-byok="page-mark"][data-nested] [data-byok="page-mark-label"]')).toHaveText(/^How it works, step 2/)
+  await expect(page.locator('[data-byok="page-mark"][data-crowded]')).toHaveCount(0)
+  await page.screenshot({ path: 'test-results/page-context-nested.png' })
+  // With the tops together, the step's label and button go inside its border, off the section's.
+  const parts = (part: string) => ['[data-byok="page-mark"]:not([data-nested])', '[data-byok="page-mark"][data-nested]'].map(mark => page.locator(`${mark} [data-byok="${part}"]`))
+  const apart = async (part: string) => {
+    const [o, i] = await Promise.all(parts(part).map(async locator => (await locator.boundingBox())!))
+    return o.x + o.width <= i.x || i.x + i.width <= o.x || o.y + o.height <= i.y || i.y + i.height <= o.y
+  }
+  await section.evaluate(element => { (element as HTMLElement).style.paddingTop = '0'; (element as HTMLElement).style.alignItems = 'start' })
+  await expect.poll(() => same(page.locator('[data-byok="page-mark"][data-nested]'), step(page, 2))).toBe(true)
+  await expect(page.locator('[data-byok="page-mark"][data-crowded]')).toHaveCount(1)
+  expect(await apart('page-mark-label')).toBe(true)
+  expect(await apart('page-mark-remove')).toBe(true)
+  await page.screenshot({ path: 'test-results/page-context-crowded.png' })
+  await page.getByRole('button', { name: '2 elements', exact: true }).click()
+  await expect(page.locator('.chat-compose [data-byok="page-element-place"]')).toHaveText([`in ${SECTION}`])
+  await page.screenshot({ path: 'test-results/page-context-nested-list.png' })
+
+  await messageBox(page).fill('What is this part of the page?')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText(/^Read:/)).toContainText(SECTION)
+  const note = String(prompts[0].find(m => m.role === 'user')!.content)
+  expect(note).toMatch(new RegExp(`- [a-f0-9]{32}: "${SECTION}"$`, 'm'))
+  expect(note).toMatch(new RegExp(`- [a-f0-9]{32}: "How it works, step 2[^"]*" \\(inside "${SECTION}"\\)$`, 'm'))
+  // Reading the section gives its description only; the step gives its own data.
+  const results = prompts[1].filter(m => m.role === 'tool').map(m => JSON.parse(String(m.content)))
+  expect(results).toContainEqual({ description: SECTION })
+  expect(results.find(r => /step 2/.test(r.description)).data[0].title).toBe('MCP')
+  expect(errors).toEqual([])
+})
+
+test('an element that declares its data twice is not offered, and the console says why', async ({ page }) => {
+  const warnings: string[] = []
+  page.on('console', message => { if (message.type() === 'warning') warnings.push(message.text()) })
+  await seed(page, {})
+  await page.goto('/')
+  // Step 1 has data-ai-context-data; this gives it a read expression too.
+  await page.evaluate(() => document.querySelectorAll('#how-it-works article')[0].setAttribute('data-ai-context-read', '1'))
+  await step(page, 1).scrollIntoViewIfNeeded()
+  await openChat(page)
+  await page.getByRole('button', { name: 'Add from page', exact: true }).click()
+  await expect(page.locator('[data-byok="page-picker-hint"]')).toHaveText(/^4 elements on this page can be added/)
+  // Under the pointer, the step is passed over for the section around it.
+  const box = (await step(page, 1).boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await expect(page.locator('[data-byok="page-picker-description"]')).toHaveText('How it works: the three steps of using byok-ai')
+  await page.keyboard.press('Escape')
+  expect(warnings.filter(text => /sets both data-ai-context-data and data-ai-context-read/.test(text))).toHaveLength(1)
 })

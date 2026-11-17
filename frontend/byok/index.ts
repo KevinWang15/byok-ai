@@ -1,6 +1,6 @@
 export {
   AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIMessageActions, AskAIHistory, AskAITools,
-  AskAIComposerImages, AskAIMessageImages, AskAIAddImage,
+  AskAIComposerImages, AskAIMessageImages, AskAIAddImage, AskAIAddFromPage, AskAIComposerElements, AskAIMessageElements,
 } from './AskAI'
 export { useAskAIImage } from './useAskAIImage'
 export { AskAIProvider } from './AskAIProvider'
@@ -21,3 +21,5 @@ export { Markdown, MarkdownText } from './Markdown'
 export type { MarkdownProps } from './Markdown'
 export { answerComponentInstructions, defineAnswerComponent } from './answer-components'
 export type { AnswerComponent } from './answer-components'
+export { PAGE_CONTEXT_ATTRIBUTES, PAGE_CONTEXT_LIMITS, elementCount } from './page-context'
+export type { McpCall } from './page-context'

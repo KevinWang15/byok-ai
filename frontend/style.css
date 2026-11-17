@@ -160,7 +160,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 .chat-message-actions [data-copied] { color: #7f9b7d!important; }
 .chat-working { display: flex; align-items: center; gap: 7px; color: #a18caf; font-size: 10px; margin-top: 8px; }
 .chat-compose-area { flex-shrink: 0; padding: 12px 18px 14px; border-top: 1px solid #f0eaf4; background: #fefcfff2; }
-.chat-compose { display: flex; align-items: flex-end; gap: 9px; padding: 11px 10px 11px 14px; border: 1px solid #e7dded; border-radius: 16px; background: #fff; box-shadow: 0 2px 7px #8c74a306; }
+.chat-compose { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 9px; padding: 11px 10px 11px 14px; border: 1px solid #e7dded; border-radius: 16px; background: #fff; box-shadow: 0 2px 7px #8c74a306; }
 .chat-compose:focus-within { border-color: #cdbbdd; box-shadow: 0 0 0 3px #f5f0fa; }
 .chat-compose textarea { border: 0; outline: 0!important; background: none; color: #584660; font-size: 13px; line-height: 1.6; resize: none; width: 100%; min-width: 0; min-height: 32px; max-height: 130px; padding: 4px 0; }
 .chat-compose textarea::placeholder { color: #b1a4ba; }
@@ -304,3 +304,40 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 [data-byok="markdown"] .mdw-component { border: 0; background: none; margin-block: 0.75em; }
 [data-byok="markdown"] .mdw-component-header { display: none; }
 [data-byok="markdown"] .mdw-component-preview { padding: 0; }
+
+/* Page context: choosing an element of the page, and the marks around the ones a message holds. */
+[data-byok="page-picker"] { background: #3d364a0d; }
+[data-byok="page-picker-highlight"] { box-sizing: border-box; border: 2px solid #8b6fb0; border-radius: 8px; background: #a58ab722; transition: left .06s, top .06s, width .06s, height .06s; }
+[data-byok="page-picker-label"], [data-byok="page-mark-label"] { box-sizing: border-box; max-width: min(420px, 90vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 4px 10px; border-radius: 7px; background: #3d364a; color: #fff; font: 500 11px/1.45 Inter, sans-serif; box-shadow: 0 4px 14px #3d364a33; }
+[data-byok="page-picker-label"] { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 8px 8px 8px 2px; }
+[data-byok="page-picker-description"] { min-width: 0; overflow: hidden; text-overflow: ellipsis; padding: 1px 7px; cursor: pointer; }
+[data-byok="page-picker-outer"], [data-byok="page-picker-inner"] { flex-shrink: 0; display: grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: #ffffff1a; color: #e4dcee; font: 600 12px/1 Inter, sans-serif; cursor: pointer; }
+[data-byok="page-picker-outer"]:hover, [data-byok="page-picker-inner"]:hover { background: #ffffff33; color: #fff; }
+[data-byok="page-picker-outer"][hidden], [data-byok="page-picker-inner"][hidden] { display: none; }
+[data-byok="page-picker-hint"] { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); width: max-content; max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 12px; background: #3d364a; color: #fff; font: 12px/1.5 Inter, sans-serif; text-align: center; box-shadow: 0 10px 30px #3d364a40; pointer-events: none; }
+
+[data-byok="page-mark"] { box-sizing: border-box; z-index: 40; border: 2px dashed #8b6fb0; border-radius: 8px; }
+[data-byok="page-mark-label"] { position: absolute; left: -2px; bottom: calc(100% + 4px); max-width: min(360px, calc(100% - 24px)); }
+[data-byok="page-mark-remove"] { position: absolute; top: -11px; right: -11px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #8b6fb0; color: #fff; font: 600 14px/1 Inter, sans-serif; cursor: pointer; box-shadow: 0 2px 8px #3d364a40; }
+[data-byok="page-mark-remove"]:hover { background: #6d5f89; }
+/* A mark inside another marked element, too close to its top: label and button inside its own border, off the outer mark's. */
+[data-byok="page-mark"][data-nested] [data-byok="page-mark-label"] { background: #6d5f89; }
+[data-byok="page-mark"][data-crowded] [data-byok="page-mark-label"] { left: 6px; top: 6px; bottom: auto; max-width: calc(100% - 44px); }
+[data-byok="page-mark"][data-crowded] [data-byok="page-mark-remove"] { top: 5px; right: 5px; }
+
+/* The elements a message holds: a chip that opens their list, in the composer and above a sent message. */
+[data-byok="page-elements"] { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; max-width: 100%; font-size: 11px; color: #8b739f; }
+[data-byok="page-elements-summary"] { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px dashed #cdbbdd; border-radius: 100px; background: #faf6fd; color: #6d5f89; font-size: 11px!important; line-height: 1.5; }
+[data-byok="page-elements-summary"]:hover { border-color: #b9a3cf; background: #f5eefa; }
+[data-byok="page-elements-summary"]::before { content: ''; width: 7px; height: 7px; border: 1.5px dashed currentColor; border-radius: 2px; }
+[data-byok="page-elements"] ul { list-style: none; align-self: stretch; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+[data-byok="page-element"] { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 1px; min-height: 30px; box-sizing: border-box; padding: 5px 6px 5px 10px; border-radius: 8px; background: #f8f4fb; line-height: 1.45; }
+[data-byok="page-element"] > span { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #6d5f89; }
+[data-byok="page-element-place"] { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #b1a4ba; font-size: 10px; }
+[data-byok="page-element-remove"] { grid-column: 2; grid-row: 1 / span 2; padding: 3px 7px; border: 0; border-radius: 6px; background: none; color: #a18caf; font-size: 11px!important; }
+[data-byok="page-element-remove"]:hover { background: #efe7f5; color: #6d5f89; }
+/* Above a sent message: on the bubble's side, a gap above the bubble, the list no wider than the column. */
+.chat-user-message [data-byok="page-elements"] { align-self: stretch; align-items: flex-end; margin-bottom: 8px; }
+.chat-user-message [data-byok="page-elements"] ul { justify-self: end; }
+.chat-user-message [data-byok="page-element"] { background: #f5f0fa; }
+.chat-compose > [data-byok="page-elements"] { flex: 1 0 100%; padding-bottom: 2px; }

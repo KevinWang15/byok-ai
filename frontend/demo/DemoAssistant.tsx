@@ -2,7 +2,8 @@ import { useId } from 'react'
 import { Button, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
 import { ComposerPrimitive, MessagePrimitive, ThreadPrimitive, groupPartByType, type ToolCallMessagePartProps } from '@assistant-ui/react'
 import {
-  AskAIAddImage, AskAIChat, AskAIComposerImages, AskAIHistory, AskAIMessageActions, AskAIMessageContent, AskAIMessageImages, usePanelLayout,
+  AskAIAddFromPage, AskAIAddImage, AskAIChat, AskAIComposerElements, AskAIComposerImages, AskAIHistory, AskAIMessageActions, AskAIMessageContent,
+  AskAIMessageElements, AskAIMessageImages, usePanelLayout,
   AskAIPanel, AskAITrigger, MarkdownText, useAskAI, type ResizeEdge,
 } from '../byok'
 
@@ -16,7 +17,7 @@ function IconButton({ label, icon, disabled, onClick }: { label: string; icon: D
 }
 function DemoUserMessage() {
   return <MessagePrimitive.Root data-byok="message" data-role="user" className="chat-user-message">
-    <span className="chat-message-label">You</span><AskAIMessageImages /><div className="chat-user-bubble"><AskAIMessageContent /></div>
+    <span className="chat-message-label">You</span><AskAIMessageImages /><AskAIMessageElements /><div className="chat-user-bubble"><AskAIMessageContent /></div>
   </MessagePrimitive.Root>
 }
 const toolGroups = groupPartByType({ 'tool-call': ['group-tools'] })
@@ -25,6 +26,7 @@ const toolLabels: Record<string, string> = {
   docs__get_current_time: 'Check current time',
   workspace__save_tool_result: 'Save to file',
   workspace__run_javascript: 'Calculate',
+  page__read_element: 'Read from the page',
 }
 function ToolDetail({ toolName, argsText, result, isError, status }: ToolCallMessagePartProps) {
   const running = result === undefined && status.type === 'running'
@@ -84,11 +86,14 @@ function DemoComposer() {
   const { connection, images } = useAskAI()
   return <div className="chat-compose-area">
     <ComposerPrimitive.Root className="chat-compose">
+      {/* The page elements take a row of their own, the composer's full width, above the box. */}
+      <AskAIComposerElements />
       <ComposerPrimitive.AttachmentDropzone className="chat-compose-body" disabled={!images}>
         <AskAIComposerImages />
         <ComposerPrimitive.Input placeholder="Ask a question…" aria-label="Message" disabled={!connection} />
       </ComposerPrimitive.AttachmentDropzone>
       <AskAIAddImage className="chat-attach" aria-label="Attach image" title="Attach image"><Icon name="image" /></AskAIAddImage>
+      <AskAIAddFromPage className="chat-attach" aria-label="Add from page" title="Add from page"><Icon name="pick" /></AskAIAddFromPage>
       <ThreadPrimitive.If running={false}><ComposerPrimitive.Send className="chat-send" aria-label="Send message" title="Send message" disabled={!connection}><Icon name="send" /></ComposerPrimitive.Send></ThreadPrimitive.If>
       <ThreadPrimitive.If running><ComposerPrimitive.Cancel className="chat-send" aria-label="Stop response" title="Stop response"><Icon name="stop" /></ComposerPrimitive.Cancel></ThreadPrimitive.If>
     </ComposerPrimitive.Root>

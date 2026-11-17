@@ -1,6 +1,7 @@
 import type { ThreadMessage } from '@assistant-ui/react'
 import type { ProviderValues } from './types'
 import { isImageId } from './conversation-files'
+import { isPageElementId, PAGE_ELEMENT_TYPE } from './page-context'
 
 // What the library saves in localStorage, under two keys:
 // - the conversations key (`storageKey`): the conversations and which one is open;
@@ -40,11 +41,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 // A sent image: its bytes are in the conversation's image store, under its id (images.ts).
 const isSavedImage = (value: unknown) => isRecord(value) && value.type === 'image' && typeof value.id === 'string' && isImageId(value.id) &&
   typeof value.name === 'string' && typeof value.contentType === 'string' && isRecord(value.status) && value.status.type === 'complete'
+// A page element added to a message: its id, description and place; what it is read from lives in the page (page-context.ts).
+// Its content is one part: where it was, as the descriptions of the elements it was inside.
+const isPlace = (value: unknown) => Array.isArray(value) && value.length === 1 && isRecord(value[0]) && value[0].type === 'data' && value[0].name === 'page-element' &&
+  isRecord(value[0].data) && Array.isArray(value[0].data.inside) && value[0].data.inside.every(name => typeof name === 'string')
+const isSavedPageElement = (value: unknown) => isRecord(value) && value.type === 'page-element' && typeof value.id === 'string' && isPageElementId(value.id) &&
+  typeof value.name === 'string' && value.contentType === PAGE_ELEMENT_TYPE && isRecord(value.status) && value.status.type === 'complete' && isPlace(value.content)
 function readMessage(value: unknown): ThreadMessage | undefined {
   if (!isRecord(value) || typeof value.id !== 'string' || !['user', 'assistant', 'system'].includes(String(value.role)) || !Array.isArray(value.content)) return
   if (!value.content.every(part => isRecord(part) && typeof part.type === 'string' && (part.type !== 'text' || typeof part.text === 'string'))) return
-  // A user message's attachments are the images sent with it.
-  if (value.role === 'user' && (!Array.isArray(value.attachments) || !value.attachments.every(isSavedImage))) return
+  // A user message's attachments are the images and page elements sent with it.
+  if (value.role === 'user' && (!Array.isArray(value.attachments) || !value.attachments.every(a => isSavedImage(a) || isSavedPageElement(a)))) return
   const createdAt = new Date(typeof value.createdAt === 'string' ? value.createdAt : NaN)
   if (!Number.isFinite(createdAt.getTime())) return
   // A response still running when the page closed can't be resumed: it is shown as cancelled.

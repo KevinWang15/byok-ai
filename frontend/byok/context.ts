@@ -20,6 +20,17 @@ export interface AskAIContextValue {
   images: boolean
   /** An image of the open conversation by attachment id; undefined when it is no longer stored. */
   loadImage: (id: string) => Promise<Blob | undefined>
+  /** Whether the user can add elements of the page to a message: the `pageContext` option. */
+  pageContext: boolean
+  /** Whether the user is choosing an element of the page now. */
+  picking: boolean
+  /**
+   * Lets the user choose an element of the page and adds it to the composer. Does nothing while
+   * choosing, or when `pageContext` is off. A message that holds as many as it can says so in `error`.
+   */
+  pickFromPage: () => void
+  /** The element a page element attachment of the composer stands for, while it is on the page. */
+  pageElement: (id: string) => Element | undefined
   open: boolean
   setOpen: (open: boolean) => void
   page: AskAIPage

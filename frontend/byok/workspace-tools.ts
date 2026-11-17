@@ -1,5 +1,6 @@
-import { jsonSchema, tool, type ToolSet } from 'ai'
+import { jsonSchema, tool, type ToolExecutionOptions, type ToolSet } from 'ai'
 import type { Workspace } from './conversation-files'
+import { mcpError, mcpText } from './mcp-result'
 import { SCRIPT_LIMITS } from './sandbox'
 import type { ScriptRunner } from './script-runner'
 
@@ -9,22 +10,26 @@ import type { ScriptRunner } from './script-runner'
 // needs. The tools are named `workspace__…`, so the "workspace" MCP server id is reserved.
 
 export const WORKSPACE_ID = 'workspace'
+/**
+ * What save_tool_result saves for a tool whose result for the model is not all of it (page
+ * context gives a large read in part): the tool's whole result, in place of calling `execute`.
+ */
+export const SAVED_RESULT = Symbol('byok-ai saved result')
+export type SavableTool = ToolSet[string] & { [SAVED_RESULT]?: (input: unknown, options: ToolExecutionOptions<unknown>) => Promise<unknown> }
 const READ_DEFAULT = 4_000
 const READ_MAX = 20_000
 
 /** What a tool call returned, as text to save: an MCP result's content, anything else as JSON. */
 export function toolResultText(result: unknown, fromMcp: boolean): string {
   if (fromMcp && typeof result === 'object' && result !== null) {
-    const { content, structuredContent, isError } = result as { content?: unknown; structuredContent?: unknown; isError?: boolean }
-    if (isError) throw new Error('The tool reported an error: ' + mcpText(content).slice(0, 2000))
+    const error = mcpError(result)
+    if (error) throw new Error(error)
+    const { content, structuredContent } = result as { content?: unknown; structuredContent?: unknown }
     if (structuredContent !== undefined) return JSON.stringify(structuredContent, null, 2)
     if (Array.isArray(content)) return mcpText(content)
   }
   return typeof result === 'string' ? result : JSON.stringify(result, null, 2) ?? 'null'
 }
-const mcpText = (content: unknown) => Array.isArray(content)
-  ? content.map(part => part?.type === 'text' && typeof part.text === 'string' ? part.text : JSON.stringify(part)).join('\n')
-  : JSON.stringify(content) ?? ''
 
 // A short view of saved text, so the model can write a script without reading the whole file.
 function preview(text: string) {
@@ -101,9 +106,10 @@ export function workspaceTools(options: {
       }),
       execute: async ({ tool: name, arguments: input = {}, file }, callOptions) => {
         if (name.startsWith(WORKSPACE_ID + '__')) throw new Error('Workspace tools can\'t be saved: call them directly.')
-        const target = options.tools()[name]
-        if (!target?.execute) throw new Error(`There is no tool named ${name}.`)
-        const result = await target.execute(input as never, callOptions as never)
+        const target: SavableTool | undefined = options.tools()[name]
+        const execute = target?.[SAVED_RESULT] ?? target?.execute
+        if (!execute) throw new Error(`There is no tool named ${name}.`)
+        const result = await execute(input as never, callOptions as never)
         const text = toolResultText(result, options.isMcp(name))
         return serial(async () => {
           await ws().write(file, text)

@@ -6,7 +6,9 @@ import { defaultProviders } from './providers'
 import { createBrowserAdapter } from './agent'
 import { answerComponentInstructions, type AnswerComponent } from './answer-components'
 import { browserFilesAvailable, opfsConversationFiles, type ConversationFiles } from './conversation-files'
-import { imageAttachmentAdapter } from './images'
+import { imageAttachmentAdapter, isImageAttachment } from './images'
+import { isPageElementAttachment, PAGE_CONTEXT_LIMITS, PAGE_ELEMENT_TYPE, pageElementRegistry, type PageElementRegistry } from './page-context'
+import { pickPageElement } from './page-picker'
 import { workerScriptRunner } from './script-runner'
 import {
   DEFAULT_STORAGE_KEY, defaultConnectionKey, isEmptyConversation, loadConnection, loadConversations, newConversation,
@@ -25,9 +27,11 @@ function connectionOf(providers: ProviderPreset[], saved: StoredConnection | und
   return provider && saved ? { provider, values: { ...saved.values } } : undefined
 }
 
-type State = Omit<AskAIContextValue, 'runtime' | 'error' | 'images'>
-function Runtime({ state, clientTools, files, workspace, images, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, save, onBusy, children }: {
+type State = Omit<AskAIContextValue, 'runtime' | 'error' | 'images' | 'pageContext' | 'picking' | 'pickFromPage' | 'pageElement'>
+function Runtime({ state, clientTools, files, workspace, images, pageElements, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls, save, onBusy, children }: {
   state: State; clientTools: ToolSet; files: ConversationFiles; workspace: boolean; images: boolean
+  // The elements picked from the page, when page context is on.
+  pageElements?: PageElementRegistry
   systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number
   save: (conversation: Conversation) => void; onBusy: (busy: boolean) => void; children: ReactNode
 }) {
@@ -54,23 +58,55 @@ function Runtime({ state, clientTools, files, workspace, images, systemPrompt, m
         workspace: workspace ? { open: () => files.workspace(conversationId), run: workerScriptRunner } : undefined,
         // Images already in the conversation go to the model even if attaching is now off.
         images: files.images(conversationId),
+        pageElements,
       }).run(options)
     } }
   // toolNames stands for the tools: their definitions are read through the ref.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connection, mcpServers, toolNames, files, workspace, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls])
+  }, [connection, mcpServers, toolNames, files, workspace, pageElements, systemPrompt, maxSteps, maxOutputTokens, maxToolCalls])
   // The composer's images are saved to the conversation open when the message is sent. The refs
-  // are read when an image is added or sent, never while rendering.
+  // are read when an image is added or sent, never while rendering. Page elements are added as
+  // they are, past the adapter, but only of a type it accepts.
   const runtimeRef = useRef<AssistantRuntime>(null)
-  // eslint-disable-next-line react-hooks/refs
-  const attachments = useMemo(() => attaching ? imageAttachmentAdapter({
-    attached: () => runtimeRef.current?.thread.composer.getState().attachments.length ?? 0,
-    images: () => files.images(activeRef.current.id),
-  }) : undefined, [attaching, files])
+  const attachments = useMemo(() => {
+    if (!attaching) return undefined
+    // eslint-disable-next-line react-hooks/refs
+    const adapter = imageAttachmentAdapter({
+      attached: () => runtimeRef.current?.thread.composer.getState().attachments.filter(isImageAttachment).length ?? 0,
+      images: () => files.images(activeRef.current.id),
+    })
+    return pageElements ? { ...adapter, accept: adapter.accept + ',' + PAGE_ELEMENT_TYPE } : adapter
+  }, [attaching, files, pageElements])
   const runtime = useLocalRuntime(adapter, { initialMessages: activeConversation.messages, adapters: { attachments } })
   useLayoutEffect(() => { runtimeRef.current = runtime })
   // An image that can't be attached (too many, unreadable) says why, where answers' errors show.
   useEffect(() => runtime.thread.composer.unstable_on('attachmentAddError', event => setError(event.message)), [runtime])
+  // Choosing an element of the page for the composer. Opening another conversation cancels it, as
+  // it drops what the composer holds.
+  const [picking, setPicking] = useState(false)
+  const pickingRef = useRef<AbortController>(undefined)
+  useEffect(() => () => pickingRef.current?.abort(), [runtime, activeConversation.id])
+  const pickFromPage = useCallback(() => {
+    if (!pageElements || pickingRef.current) return
+    const { composer } = runtime.thread
+    const added = () => composer.getState().attachments.filter(isPageElementAttachment)
+    const full = `A message can hold at most ${PAGE_CONTEXT_LIMITS.perMessage} elements from the page.`
+    if (added().length >= PAGE_CONTEXT_LIMITS.perMessage) return setError(full)
+    const controller = new AbortController()
+    pickingRef.current = controller
+    setPicking(true)
+    void pickPageElement({ signal: controller.signal }).then(async element => {
+      if (!element || controller.signal.aborted) return
+      // Adding an element twice is adding it once.
+      if (added().some(attachment => pageElements.picked(attachment.id) === element)) return
+      if (added().length >= PAGE_CONTEXT_LIMITS.perMessage) return setError(full)
+      await composer.addAttachment(pageElements.add(element))
+    }).catch(() => {}).finally(() => {
+      if (pickingRef.current === controller) pickingRef.current = undefined
+      setPicking(false)
+    })
+  }, [runtime, pageElements])
+  const pageElement = useCallback((id: string) => pageElements?.picked(id), [pageElements])
   // Opening a conversation loads it into the thread; saving the open one doesn't. Images not yet
   // sent stay with the conversation they were attached in, which is to say they are dropped.
   useEffect(() => {
@@ -90,8 +126,10 @@ function Runtime({ state, clientTools, files, workspace, images, systemPrompt, m
       savedMessages = messages
       savedDraft = draft
       const first = messages.find(m => m.role === 'user')
-      const title = first?.content.flatMap(p => p.type === 'text' ? [p.text] : []).join(' ').slice(0, 48)
-        || (first?.role === 'user' && first.attachments.length ? 'Image' : 'New conversation')
+      const attached = first?.role === 'user' ? first.attachments : []
+      const title = (first?.content.flatMap(p => p.type === 'text' ? [p.text] : []).join(' ')
+        || (attached.some(isImageAttachment) ? 'Image' : attached.find(isPageElementAttachment)?.name)
+        || 'New conversation').slice(0, 48)
       save({ id: activeConversation.id, title, messages, draft, updatedAt: Date.now() })
     }
     const unsubscribe = runtime.thread.subscribe(() => {
@@ -114,11 +152,11 @@ function Runtime({ state, clientTools, files, workspace, images, systemPrompt, m
     }
   }, [runtime, activeConversation.id, save, onBusy])
   return <AssistantRuntimeProvider runtime={runtime}>
-    <AskAIContext.Provider value={{ ...state, images: attaching, runtime, error }}>{children}</AskAIContext.Provider>
+    <AskAIContext.Provider value={{ ...state, images: attaching, pageContext: pageElements !== undefined, picking, pickFromPage, pageElement, runtime, error }}>{children}</AskAIContext.Provider>
   </AssistantRuntimeProvider>
 }
 
-function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVERS, clientTools = NO_TOOLS, workspace = false, images = false, systemPrompt: basePrompt = DEFAULT_PROMPT,
+function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVERS, clientTools = NO_TOOLS, workspace = false, images = false, pageContext = false, systemPrompt: basePrompt = DEFAULT_PROMPT,
   answerComponents = NO_COMPONENTS, componentInstructions = true, storageKey = DEFAULT_STORAGE_KEY, connectionKey = defaultConnectionKey(storageKey), title = 'Ask AI', maxSteps = 8, maxOutputTokens, maxToolCalls, children }: AskAIProviderProps) {
   if (connectionKey === storageKey) throw new Error('connectionKey must differ from storageKey.')
   // The model is told about the answer components after the host's own prompt.
@@ -148,6 +186,9 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
   const workspaceOn = workspace && canKeepFiles
   const imagesOn = images && canKeepFiles
   const openWorkspace = useMemo(() => workspaceOn ? files.workspace(activeId) : undefined, [workspaceOn, files, activeId])
+  // The elements picked from the page while it lives, for every conversation of this assistant.
+  const [registry] = useState(pageElementRegistry)
+  const pageElements = pageContext ? registry : undefined
   const loadImage = useCallback((id: string) => files.images(activeId).load(id), [files, activeId])
 
   const [open, setOpen] = useState(false)
@@ -198,7 +239,7 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
       files.remove(id).catch(() => setStorageError(true))
     },
   }
-  return <Runtime state={state} clientTools={clientTools} files={files} workspace={workspaceOn} images={imagesOn} systemPrompt={systemPrompt}
+  return <Runtime state={state} clientTools={clientTools} files={files} workspace={workspaceOn} images={imagesOn} pageElements={pageElements} systemPrompt={systemPrompt}
     maxSteps={maxSteps} maxOutputTokens={maxOutputTokens} maxToolCalls={maxToolCalls} save={save} onBusy={setBusy}>
     {children}
   </Runtime>

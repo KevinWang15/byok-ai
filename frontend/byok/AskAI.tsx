@@ -7,6 +7,7 @@ import { MarkdownText } from './Markdown'
 import { AskAIHistory } from './AskAIHistory'
 import { MessageRenderingContext } from './rendering-context'
 import { useAskAIImage } from './useAskAIImage'
+import { AskAIAddFromPage, AskAIComposerElements, AskAIMessageElements } from './PageElements'
 import type { AskAIChatProps, AskAIProps, ProviderPreset, ProviderValues } from './types'
 import type { Workspace, WorkspaceFile } from './conversation-files'
 
@@ -51,7 +52,8 @@ function ImageThumb() {
     {!sent && <AttachmentPrimitive.Remove data-byok="image-remove" aria-label={`Remove ${name}`}>Remove</AttachmentPrimitive.Remove>}
   </AttachmentPrimitive.Root>
 }
-const IMAGE_COMPONENTS = { Image: ImageThumb, Attachment: ImageThumb }
+// Images only: a message's page elements are AskAIComposerElements' and AskAIMessageElements'.
+const IMAGE_COMPONENTS = { Image: ImageThumb }
 /** The images attached in the composer, each with a remove button. Use inside a composer. */
 export function AskAIComposerImages() {
   return <div data-byok="composer-images"><ComposerPrimitive.Attachments components={IMAGE_COMPONENTS} /></div>
@@ -74,7 +76,7 @@ export function AskAIAddImage({ children = 'Attach image', ...props }: Component
 function Message() {
   const role = useAuiState(state => state.message.role)
   return <MessagePrimitive.Root data-byok="message" data-role={role}>
-    {role === 'user' && <AskAIMessageImages />}
+    {role === 'user' && <><AskAIMessageImages /><AskAIMessageElements /></>}
     <AskAIMessageContent />{role === 'assistant' && <AskAIMessageActions />}
   </MessagePrimitive.Root>
 }
@@ -84,9 +86,11 @@ function DefaultComposer() {
   return <ComposerPrimitive.Root data-byok="composer">
     <ComposerPrimitive.AttachmentDropzone data-byok="composer-dropzone" disabled={!images}>
       <AskAIComposerImages />
+      <AskAIComposerElements />
       <ComposerPrimitive.Input placeholder="Ask anything…" aria-label="Message" disabled={!connection} />
     </ComposerPrimitive.AttachmentDropzone>
     <AskAIAddImage />
+    <AskAIAddFromPage />
     <ThreadPrimitive.If running={false}><ComposerPrimitive.Send disabled={!connection}>Send message</ComposerPrimitive.Send></ThreadPrimitive.If>
     <ThreadPrimitive.If running><ComposerPrimitive.Cancel>Stop response</ComposerPrimitive.Cancel></ThreadPrimitive.If>
   </ComposerPrimitive.Root>
@@ -144,6 +148,7 @@ export function AskAISetup() {
 }
 
 export { AskAIHistory }
+export { AskAIAddFromPage, AskAIComposerElements, AskAIMessageElements }
 
 export function AskAITools() {
   const { mcpServers, clientTools, workspace } = useAskAI()
@@ -181,10 +186,13 @@ export function AskAITrigger({ children, onClick, ...props }: ComponentPropsWith
   </Button>
 }
 
-/** Headless UI dialog: portal, focus management, Escape, and outside-click dismissal. */
+/**
+ * Headless UI dialog: portal, focus management, Escape, and outside-click dismissal. It is modal,
+ * so it steps aside while the user chooses an element of the page, and comes back after.
+ */
 export function AskAIPanel({ children, ...props }: ComponentPropsWithoutRef<'div'>) {
-  const { open, setOpen, title } = useAskAI()
-  return <Dialog open={open} onClose={setOpen} aria-label={title} data-byok="dialog">
+  const { open, setOpen, title, picking } = useAskAI()
+  return <Dialog open={open && !picking} onClose={setOpen} aria-label={title} data-byok="dialog">
     <DialogPanel data-byok="panel" {...props}>{children}</DialogPanel>
   </Dialog>
 }

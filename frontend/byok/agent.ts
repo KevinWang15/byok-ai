@@ -6,6 +6,7 @@ import type { ImageStore, Workspace } from './conversation-files'
 import { isImageAttachment } from './images'
 import type { ScriptRunner } from './script-runner'
 import { WORKSPACE_ID, workspaceTools } from './workspace-tools'
+import { isPageElementAttachment, PAGE_CONTEXT_ID, pageContextTools, pageElementsIn, pageElementsNote, type PageElementRegistry } from './page-context'
 
 /** Said in place of an image the model can't be given. */
 export const IMAGE_NOTES = {
@@ -15,14 +16,18 @@ export const IMAGE_NOTES = {
 
 /**
  * Preserve interleaved calls/results, and repair calls interrupted before a result arrived. A user
- * message's images come from `images` when the model accepts them; otherwise a note says one was there.
+ * message's images come from `images` when the model accepts them; otherwise a note says one was
+ * there. Its page elements are listed after its text, as readable when `pageElements` is true.
  */
-export async function toModelMessages(messages: readonly ThreadMessage[], images?: { store: ImageStore; accepted: boolean }): Promise<ModelMessage[]> {
+export async function toModelMessages(messages: readonly ThreadMessage[], options: { images?: { store: ImageStore; accepted: boolean }; pageElements?: boolean } = {}): Promise<ModelMessage[]> {
+  const { images } = options
   const output: ModelMessage[] = []
   for (const message of messages) {
     if (message.role !== 'assistant') {
-      const text = message.content.flatMap(p => p.type === 'text' ? [p.text] : []).join('\n')
-      const attached = message.role === 'user' ? message.attachments.filter(isImageAttachment) : []
+      const attachments = message.role === 'user' ? message.attachments : []
+      const elements = attachments.filter(isPageElementAttachment)
+      const text = [...message.content.flatMap(p => p.type === 'text' ? [p.text] : []), ...(elements.length ? [pageElementsNote(elements, options.pageElements === true)] : [])].join('\n')
+      const attached = attachments.filter(isImageAttachment)
       if (message.role === 'system' || !attached.length) { output.push({ role: message.role, content: text }); continue }
       const content: Exclude<UserContent, string> = text ? [{ type: 'text', text }] : []
       for (const attachment of attached) {
@@ -77,6 +82,8 @@ export function createBrowserAdapter(options: {
   workspace?: { open: () => Workspace; run: ScriptRunner }
   // The open conversation's images, which go to the model if its provider accepts images.
   images?: ImageStore
+  // The elements the user picked from the page: adds the page context tool, which reads them.
+  pageElements?: PageElementRegistry
   systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number; onError: (message: string) => void
 }): ChatModelAdapter {
   return {
@@ -103,6 +110,7 @@ export function createBrowserAdapter(options: {
           abortSignal.throwIfAborted()
           if (!/^[a-zA-Z0-9_-]+$/.test(server.id)) throw new Error('MCP IDs must contain only letters, numbers, underscores or hyphens.')
           if (options.workspace && server.id === WORKSPACE_ID) throw new Error(`The MCP id "${WORKSPACE_ID}" is taken by the workspace tools.`)
+          if (options.pageElements && server.id === PAGE_CONTEXT_ID) throw new Error(`The MCP id "${PAGE_CONTEXT_ID}" is taken by the page context tools.`)
           const client = await createMCPClient({ transport: {
             type: 'http', url: new URL(server.url, window.location.href).href,
             fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([abortSignal, AbortSignal.timeout(60_000), ...(init?.signal ? [init.signal] : [])]) }),
@@ -123,8 +131,16 @@ export function createBrowserAdapter(options: {
           let workspace: Workspace | undefined
           Object.assign(tools, workspaceTools({ workspace: () => workspace ??= open(), run, tools: () => tools, isMcp: name => mcpTools.has(name) }))
         }
+        if (options.pageElements) {
+          Object.assign(tools, pageContextTools({
+            registry: options.pageElements, elements: pageElementsIn(messages), tools: () => tools, isMcp: name => mcpTools.has(name), canSave: options.workspace !== undefined,
+          }))
+        }
         const model = options.provider.createModel(options.values)
-        const history = await toModelMessages(messages, options.images && { store: options.images, accepted: options.provider.acceptsImages === true })
+        const history = await toModelMessages(messages, {
+          images: options.images && { store: options.images, accepted: options.provider.acceptsImages === true },
+          pageElements: options.pageElements !== undefined,
+        })
         const finalInstructions = [options.systemPrompt, FINAL_STEP_INSTRUCTION].filter(Boolean).join('\n\n')
         // Streams one run into content; returns how it ended.
         const pump = async function* (result: ReturnType<typeof streamText>) {
