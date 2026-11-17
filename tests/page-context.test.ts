@@ -102,12 +102,15 @@ test('messages with page elements are saved and load again; other attachments ar
   Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
     getItem: (key: string) => store.get(key) ?? null, setItem: (key: string, value: string) => void store.set(key, value), removeItem: (key: string) => void store.delete(key),
   } })
-  const conversation = (attachment: unknown) => ({ id: 'x', title: 'T', updatedAt: 1, draft: '', messages: [userWith([attachment])] })
+  const conversation = (attachment: unknown) => {
+    const message = userWith([attachment])
+    return { id: 'x', title: 'T', updatedAt: 1, draft: '', messages: [{ message, parentId: null }], headId: message.id }
+  }
   saveConversations('k', { conversations: [conversation(added(ID, 'X', ['Outer'])), conversation({ ...added(), id: 'not-an-id' }), conversation({ ...added(), contentType: 'text/plain' }),
     conversation({ ...added(), content: [] }), conversation({ ...added(), content: [{ type: 'data', name: 'page-element', data: { inside: [1] } }] })] })
   const { data } = loadConversations('k')
   assert.equal(data.conversations.length, 1)
-  assert.deepEqual(data.conversations[0].messages[0].attachments, [added(ID, 'X', ['Outer'])], 'only one with its place')
+  assert.deepEqual((data.conversations[0].messages[0].message as { attachments: unknown }).attachments, [added(ID, 'X', ['Outer'])], 'only one with its place')
 })
 
 test('the model reads an element the user added, through the MCP tools and the page\'s readers its source names', async () => {

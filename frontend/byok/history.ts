@@ -1,4 +1,4 @@
-import type { Conversation } from './storage'
+import { conversationBranch, type Conversation } from './storage'
 
 export function relativeConversationTime(timestamp: number, now: number): string {
   const seconds = Math.max(0, (now - timestamp) / 1000)
@@ -14,7 +14,7 @@ export function relativeConversationTime(timestamp: number, now: number): string
 
 export function conversationPreview(conversation: Conversation): string {
   if (conversation.draft.trim()) return 'Draft: ' + conversation.draft.trim()
-  for (const message of [...conversation.messages].reverse()) {
+  for (const message of conversationBranch(conversation).reverse()) {
     const text = message.content.flatMap(part => part.type === 'text' ? [part.text] : []).join(' ').trim()
     if (text) return text.replace(/\s+/g, ' ').slice(0, 180)
   }

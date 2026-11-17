@@ -10,7 +10,7 @@ import { imageAttachmentAdapter, isImageAttachment } from './images'
 import { isPageElementAttachment, PAGE_CONTEXT_LIMITS, PAGE_ELEMENT_TYPE, pageElementRegistry, type PageElementRegistry, type PageReaders } from './page-context'
 import { pickPageElement } from './page-picker'
 import { workerScriptRunner } from './script-runner'
-import { DEFAULT_STORAGE_KEY, isEmptyConversation, loadConversations, newConversation, saveConversations, type Conversation, type StoredConversations } from './storage'
+import { conversationBranch, DEFAULT_STORAGE_KEY, isEmptyConversation, loadConversations, newConversation, saveConversations, type Conversation, type StoredConversations } from './storage'
 import { defaultConnectionKey, loadConnection, sameConnection, saveConnection, subscribeConnection, type StoredConnection } from './connection'
 import type { AskAIProviderProps, McpServerConfig, ProviderPreset, ProviderValues } from './types'
 
@@ -80,7 +80,8 @@ function Runtime({ state, clientTools, files, workspace, images, pageElements, p
     })
     return pageElements ? { ...adapter, accept: adapter.accept + ',' + PAGE_ELEMENT_TYPE } : adapter
   }, [attaching, files, pageElements])
-  const runtime = useLocalRuntime(adapter, { initialMessages: activeConversation.messages, adapters: { attachments } })
+  // The branch shown first; the effect below loads the whole tree.
+  const runtime = useLocalRuntime(adapter, { initialMessages: conversationBranch(activeConversation), adapters: { attachments } })
   useLayoutEffect(() => { runtimeRef.current = runtime })
   // An image that can't be attached (too many, unreadable) says why, where answers' errors show.
   useEffect(() => runtime.thread.composer.unstable_on('attachmentAddError', event => setError(event.message)), [runtime])
@@ -110,30 +111,43 @@ function Runtime({ state, clientTools, files, workspace, images, pageElements, p
     })
   }, [runtime, pageElements])
   const pageElement = useCallback((id: string) => pageElements?.picked(id), [pageElements])
-  // Opening a conversation loads it into the thread; saving the open one doesn't. Images not yet
-  // sent stay with the conversation they were attached in, which is to say they are dropped.
+  // Opening a conversation loads it into the thread, every branch and the one shown; saving the
+  // open one doesn't. Images not yet sent stay with the conversation they were attached in, which
+  // is to say they are dropped.
   useEffect(() => {
-    runtime.thread.reset(activeRef.current.messages)
+    const { messages, headId } = activeRef.current
+    runtime.thread.import({ messages: [...messages], headId })
     runtime.thread.composer.setText(activeRef.current.draft)
     void runtime.thread.composer.clearAttachments()
   }, [runtime, activeConversation.id])
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined
-    let savedMessages = runtime.thread.getState().messages
+    let savedBranch = runtime.thread.getState().messages
     let savedDraft = runtime.thread.composer.getState().text
+    let saved = runtime.thread.export().messages.map(item => item.message)
     const snapshot = () => {
       const { messages } = runtime.thread.getState()
       const draft = runtime.thread.composer.getState().text
       // Viewing, focusing, and leaving a conversation are not new activity.
-      if (messages === savedMessages && draft === savedDraft) return
-      savedMessages = messages
+      if (messages === savedBranch && draft === savedDraft) return
+      savedBranch = messages
       savedDraft = draft
-      const first = messages.find(m => m.role === 'user')
+      const tree = runtime.thread.export()
+      const all = tree.messages.map(item => item.message)
+      // Showing another branch is saved, but isn't new activity either: it changes no message.
+      const changed = draft !== activeRef.current.draft || all.length !== saved.length || all.some((message, index) => message !== saved[index])
+      saved = all
+      // The title is the first message's, whichever branch is shown: the conversation keeps its name.
+      const first = all.find(m => m.role === 'user')
       const attached = first?.role === 'user' ? first.attachments : []
       const title = (first?.content.flatMap(p => p.type === 'text' ? [p.text] : []).join(' ')
         || (attached.some(isImageAttachment) ? 'Image' : attached.find(isPageElementAttachment)?.name)
         || 'New conversation').slice(0, 48)
-      save({ id: activeConversation.id, title, messages, draft, updatedAt: Date.now() })
+      save({
+        id: activeConversation.id, title, draft,
+        messages: tree.messages.map(({ message, parentId }) => ({ message, parentId })), headId: tree.headId ?? null,
+        updatedAt: changed ? Date.now() : activeRef.current.updatedAt,
+      })
     }
     const unsubscribe = runtime.thread.subscribe(() => {
       const { isRunning } = runtime.thread.getState()

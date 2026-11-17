@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
-import { isEmptyConversation, loadConversations, newConversation, saveConversations, type StoredConversations } from '../frontend/byok/storage'
+import { conversationBranch, isEmptyConversation, loadConversations, newConversation, saveConversations, type StoredConversations } from '../frontend/byok/storage'
 import { loadConnection, sameConnection, saveConnection, subscribeConnection } from '../frontend/byok/connection'
 
 let items: Map<string, string>
@@ -20,30 +20,55 @@ beforeEach(() => {
 const at = new Date(Date.UTC(2026, 9, 30)).toISOString()
 const userMessage = { id: 'u', role: 'user', createdAt: at, content: [{ type: 'text', text: 'Question' }], attachments: [] }
 
+const answer = (id: string, text: string, status?: unknown) => ({ id, role: 'assistant', createdAt: at, content: [{ type: 'text', text }], ...(status ? { status } : {}) })
+const question = (id: string, text: string) => ({ ...userMessage, id, content: [{ type: 'text', text }] })
+const tree = (messages: [unknown, string | null][], headId: string | null) =>
+  ({ messages: messages.map(([message, parentId]) => ({ message, parentId })), headId })
+
 test('conversations and the open one round-trip through their key', () => {
-  const data = { conversations: [{ id: 'c', title: 'Question', updatedAt: 1, draft: 'Unsent', messages: [userMessage] }], activeConversationId: 'c' }
+  const data = { conversations: [{ id: 'c', title: 'Question', updatedAt: 1, draft: 'Unsent', ...tree([[userMessage, null]], 'u') }], activeConversationId: 'c' }
   assert.equal(saveConversations('app', data as unknown as StoredConversations), true)
   const loaded = loadConversations('app')
   assert.equal(loaded.error, false)
   assert.equal(loaded.data.activeConversationId, 'c')
   assert.equal(loaded.data.conversations[0].draft, 'Unsent')
-  assert.ok(loaded.data.conversations[0].messages[0].createdAt instanceof Date)
+  assert.ok(loaded.data.conversations[0].messages[0].message.createdAt instanceof Date)
   assert.deepEqual(loadConversations('other'), { data: { conversations: [] }, error: false })
 })
+test('every branch is saved, and the one shown is the path to its last message', () => {
+  // A question answered twice (regenerated), then edited and answered: three branches.
+  const saved = tree([
+    [userMessage, null], [answer('a1', 'First'), 'u'], [answer('a2', 'Second'), 'u'],
+    [question('u2', 'Edited'), null], [answer('a3', 'Third'), 'u2'],
+  ], 'a2')
+  items.set('app', JSON.stringify({ conversations: [{ id: 'c', title: 'Question', updatedAt: 1, draft: '', ...saved }] }))
+  const [conversation] = loadConversations('app').data.conversations
+  assert.equal(conversation.messages.length, 5)
+  assert.equal(conversation.headId, 'a2')
+  assert.deepEqual(conversationBranch(conversation).map(m => m.id), ['u', 'a2'])
+  assert.deepEqual(conversationBranch({ ...conversation, headId: 'a3' }).map(m => m.id), ['u2', 'a3'])
+  assert.deepEqual(conversationBranch(newConversation()), [])
+})
 test('a response still running when the page closed comes back cancelled', () => {
-  items.set('app', JSON.stringify({ conversations: [{ id: 'c', title: 'Question', updatedAt: 1, draft: '', messages: [
-    userMessage, { id: 'a', role: 'assistant', createdAt: at, content: [{ type: 'text', text: 'Partial' }], status: { type: 'running' } },
-  ] }] }))
-  const message = loadConversations('app').data.conversations[0].messages[1]
+  items.set('app', JSON.stringify({ conversations: [{ id: 'c', title: 'Question', updatedAt: 1, draft: '',
+    ...tree([[userMessage, null], [answer('a', 'Partial', { type: 'running' }), 'u']], 'a') }] }))
+  const { message } = loadConversations('app').data.conversations[0].messages[1]
   assert.equal(message.role, 'assistant')
   if (message.role === 'assistant') assert.deepEqual(message.status, { type: 'incomplete', reason: 'cancelled' })
 })
 test('records without the saved shape are skipped and the rest load', () => {
+  const ok = tree([[userMessage, null]], 'u')
   items.set('app', JSON.stringify({ conversations: [
-    { id: 'kept', title: 'Question', updatedAt: 1, draft: '', messages: [userMessage] },
-    { id: 'no-date', title: 'Question', draft: '', messages: [userMessage] },
-    { id: 'bad-message', title: 'Question', updatedAt: 1, draft: '', messages: [null] },
-    { id: 'bad-created', title: 'Question', updatedAt: 1, draft: '', messages: [{ ...userMessage, createdAt: 'later' }] },
+    { id: 'kept', title: 'Question', updatedAt: 1, draft: '', ...ok },
+    { id: 'no-date', title: 'Question', draft: '', ...ok },
+    { id: 'bad-message', title: 'Question', updatedAt: 1, draft: '', ...tree([[null, null]], 'u') },
+    { id: 'bad-created', title: 'Question', updatedAt: 1, draft: '', ...tree([[{ ...userMessage, createdAt: 'later' }, null]], 'u') },
+    { id: 'parent-later', title: 'Question', updatedAt: 1, draft: '', ...tree([[answer('a', 'Answer'), 'u'], [userMessage, null]], 'a') },
+    { id: 'no-parent', title: 'Question', updatedAt: 1, draft: '', ...tree([[answer('a', 'Answer'), 'gone']], 'a') },
+    { id: 'twice', title: 'Question', updatedAt: 1, draft: '', ...tree([[userMessage, null], [userMessage, null]], 'u') },
+    { id: 'head-gone', title: 'Question', updatedAt: 1, draft: '', ...tree([[userMessage, null]], 'gone') },
+    { id: 'no-head', title: 'Question', updatedAt: 1, draft: '', ...tree([[userMessage, null]], null) },
+    { id: 'a-list', title: 'Question', updatedAt: 1, draft: '', messages: [userMessage] },
   ] }))
   assert.deepEqual(loadConversations('app').data.conversations.map(c => c.id), ['kept'])
 })
@@ -93,7 +118,7 @@ test('a conversation counts once it has a message or a non-blank draft', () => {
   assert.equal(isEmptyConversation(newConversation()), true)
   assert.equal(isEmptyConversation({ messages: [], draft: '  ' }), true)
   assert.equal(isEmptyConversation({ messages: [], draft: 'x' }), false)
-  assert.equal(isEmptyConversation({ messages: [userMessage as never], draft: '' }), false)
+  assert.equal(isEmptyConversation({ messages: [{ message: userMessage as never, parentId: null }], draft: '' }), false)
 })
 test('conversation ids are 32 hex digits, made without crypto.randomUUID', () => {
   const original = crypto.randomUUID

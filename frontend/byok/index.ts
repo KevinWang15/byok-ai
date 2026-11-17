@@ -1,5 +1,5 @@
 export {
-  AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIMessageActions, AskAIHistory, AskAITools,
+  AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIMessageActions, AskAIBranchPicker, AskAIEditComposer, AskAIHistory, AskAITools,
   AskAIComposerImages, AskAIMessageImages, AskAIAddImage, AskAIAddFromPage, AskAIComposerElements, AskAIMessageElements,
 } from './AskAI'
 export { useAskAIImage } from './useAskAIImage'
@@ -11,7 +11,8 @@ export type { AskAIContextValue, AskAIPage, ProviderConnection } from './context
 export { createBrowserAdapter } from './agent'
 export { defaultProviders } from './providers'
 export type { AskAIOptions, AskAIProps, AskAIChatProps, AskAIProviderProps, ProviderPreset, ProviderFormProps, ProviderValues, McpServerConfig } from './types'
-export type { Conversation } from './storage'
+export type { Conversation, ConversationMessage } from './storage'
+export { conversationBranch } from './storage'
 export { WORKSPACE_LIMITS, browserFilesAvailable, memoryConversationFiles } from './conversation-files'
 export type { ConversationFiles, ImageStore, Workspace, WorkspaceFile } from './conversation-files'
 export { defaultConnectionKey, loadConnection, sameConnection, subscribeConnection } from './connection'

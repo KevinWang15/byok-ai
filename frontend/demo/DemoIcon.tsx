@@ -1,12 +1,12 @@
 import {
-  ArrowLeft, ArrowRight, ArrowUp, Check, ChevronRight, Copy, History, LoaderCircle,
+  ArrowLeft, ArrowRight, ArrowUp, Check, ChevronLeft, ChevronRight, Copy, Pencil, History, LoaderCircle,
   Maximize2, Minimize2, MoreHorizontal, Plug, Settings, ShieldCheck, Sparkles,
   Square, SquarePen, X, Eye, EyeOff, HardDrive, RotateCcw, ImagePlus, SquareDashedMousePointer,
 } from 'lucide-react'
 
 const icons = {
   plus: SquarePen, history: History, settings: Settings, close: X, back: ArrowLeft,
-  send: ArrowUp, stop: Square, chevron: ChevronRight, check: Check, tools: Plug,
+  send: ArrowUp, stop: Square, chevron: ChevronRight, chevronLeft: ChevronLeft, edit: Pencil, check: Check, tools: Plug,
   copy: Copy, sparkle: Sparkles, maximize: Maximize2, restore: Minimize2,
   working: LoaderCircle, arrow: ArrowRight, shield: ShieldCheck, more: MoreHorizontal,
   eye: Eye, eyeOff: EyeOff, storage: HardDrive, regenerate: RotateCcw, image: ImagePlus, pick: SquareDashedMousePointer,

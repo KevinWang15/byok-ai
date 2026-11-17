@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button, Description, Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react'
 import { useAskAI } from './context'
 import { conversationPreview, relativeConversationTime } from './history'
+import { conversationBranch } from './storage'
 
 /**
  * Semantic history and deletion confirmation. All visual styling belongs to the consumer.
@@ -36,7 +37,8 @@ export function AskAIHistory({ title = 'Conversations', description = 'Pick up w
     <ul>{sorted.map(c => {
       const date = new Date(c.updatedAt)
       const current = c.id === activeConversation.id
-      const count = c.messages.filter(m => m.role !== 'system').length
+      // The messages of the branch shown, as the conversation opens.
+      const count = conversationBranch(c).filter(m => m.role !== 'system').length
       return <li key={c.id} data-current={current || undefined}>
         <Button type="button" data-byok="history-select" aria-current={current ? 'true' : undefined} disabled={busy} onClick={() => selectConversation(c.id)}>
           <span data-byok="history-title">{c.title}</span>

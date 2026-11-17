@@ -6,12 +6,24 @@ import { isRecord, readStored, writeStored } from './local-storage'
 // The conversations, saved in localStorage under the conversations key (`storageKey`): the
 // conversations and which one is open. The provider connection has its own key (connection.ts).
 // Records that don't have this shape are skipped, never repaired. Nothing here logs.
+//
+// A conversation is a tree: regenerating an answer or editing a message and sending it again
+// adds a message beside the one it replaces, after the same message. Each branch is one path
+// from the first message to a last one, and one branch is shown at a time.
 
+/** A message and the one it follows: null for a first message. Messages following the same one are its versions. */
+export interface ConversationMessage {
+  message: ThreadMessage
+  parentId: string | null
+}
 export interface Conversation {
   id: string
   title: string
   updatedAt: number
-  messages: readonly ThreadMessage[]
+  /** Every message of every branch, each after the one it follows. */
+  messages: readonly ConversationMessage[]
+  /** The last message of the branch shown; null while there are none. */
+  headId: string | null
   draft: string
 }
 export interface StoredConversations {
@@ -26,7 +38,16 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 export function newConversation(id = randomId()): Conversation {
-  return { id, title: 'New conversation', updatedAt: Date.now(), messages: [], draft: '' }
+  return { id, title: 'New conversation', updatedAt: Date.now(), messages: [], headId: null, draft: '' }
+}
+/** The branch shown: its messages from the first to the last (`headId`). */
+export function conversationBranch(conversation: Pick<Conversation, 'messages' | 'headId'>): ThreadMessage[] {
+  const byId = new Map(conversation.messages.map(item => [item.message.id, item]))
+  const branch: ThreadMessage[] = []
+  for (let item = conversation.headId === null ? undefined : byId.get(conversation.headId); item; item = item.parentId === null ? undefined : byId.get(item.parentId)) {
+    branch.push(item.message)
+  }
+  return branch.reverse()
 }
 /** A conversation with no messages and no unsent draft. It is never listed or saved. */
 export const isEmptyConversation = (conversation: Pick<Conversation, 'messages' | 'draft'>) =>
@@ -53,12 +74,27 @@ function readMessage(value: unknown): ThreadMessage | undefined {
   const interrupted = value.role === 'assistant' && isRecord(value.status) && ['running', 'requires-action'].includes(String(value.status.type))
   return { ...value, createdAt, ...(interrupted ? { status: { type: 'incomplete', reason: 'cancelled' } } : {}) } as unknown as ThreadMessage
 }
+// The tree: every message once, after the one it follows (so a parent comes first), and the
+// branch shown ending at one of them.
+function readTree(items: readonly unknown[], headId: unknown): Pick<Conversation, 'messages' | 'headId'> | undefined {
+  const messages: ConversationMessage[] = []
+  const ids = new Set<string>()
+  for (const item of items) {
+    if (!isRecord(item) || !(item.parentId === null || (typeof item.parentId === 'string' && ids.has(item.parentId)))) return
+    const message = readMessage(item.message)
+    if (!message || ids.has(message.id)) return
+    ids.add(message.id)
+    messages.push({ message, parentId: item.parentId })
+  }
+  if (messages.length ? typeof headId !== 'string' || !ids.has(headId) : headId !== null) return
+  return { messages, headId: headId as string | null }
+}
 function readConversation(value: unknown): Conversation | undefined {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.title !== 'string' || typeof value.draft !== 'string' ||
     typeof value.updatedAt !== 'number' || !Number.isFinite(value.updatedAt) || !Array.isArray(value.messages)) return
-  const messages = value.messages.map(readMessage)
-  if (messages.some(message => !message)) return
-  return { id: value.id, title: value.title, updatedAt: value.updatedAt, draft: value.draft, messages: messages as ThreadMessage[] }
+  const tree = readTree(value.messages, value.headId)
+  if (!tree) return
+  return { id: value.id, title: value.title, updatedAt: value.updatedAt, draft: value.draft, ...tree }
 }
 
 /** The saved conversations; `error` when storage is unreadable or holds something else. */

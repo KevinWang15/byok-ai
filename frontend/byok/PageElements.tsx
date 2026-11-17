@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, type ComponentPropsWithoutRef, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
-import { useAuiState, type Attachment } from '@assistant-ui/react'
+import { useAui, useAuiState, type Attachment } from '@assistant-ui/react'
 import { Button, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
 import { useAskAI } from './context'
 import { elementCount, insideOf, isPageElementAttachment, type PageElementAttachment } from './page-context'
@@ -45,15 +45,15 @@ function ElementList({ elements, summary, remove, anchor }: {
  * right. Marks show while this is visible. Use inside a composer; renders nothing while it holds none.
  */
 export function AskAIComposerElements({ summary = elementCount }: { summary?: (count: number) => ReactNode }) {
-  const { runtime } = useAskAI()
+  // The composer this is in: the message box, or a message being edited.
+  const aui = useAui()
   const attachments = useAuiState(state => state.composer.attachments)
   const elements = useMemo(() => pageElementsOf(attachments), [attachments])
   const anchor = useRef<HTMLDivElement>(null)
   if (!elements.length) return null
   const remove = (id: string) => {
-    const { composer } = runtime.thread
-    const index = composer.getState().attachments.findIndex(attachment => attachment.id === id)
-    if (index >= 0) void composer.getAttachmentByIndex(index).remove()
+    const index = aui.composer.getState().attachments.findIndex(attachment => attachment.id === id)
+    if (index >= 0) void aui.composer.attachment({ index }).remove()
   }
   return <>
     <ElementList elements={elements} summary={summary} remove={remove} anchor={anchor} />

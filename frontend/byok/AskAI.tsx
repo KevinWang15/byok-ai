@@ -1,5 +1,5 @@
 import { useContext, useEffect, useId, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
-import { ActionBarPrimitive, AttachmentPrimitive, ThreadPrimitive, ComposerPrimitive, MessagePrimitive, useAuiState, type ToolCallMessagePartComponent } from '@assistant-ui/react'
+import { ActionBarPrimitive, AttachmentPrimitive, ThreadPrimitive, ComposerPrimitive, MessagePrimitive, useAui, useAuiState, type ToolCallMessagePartComponent } from '@assistant-ui/react'
 import { Button, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Input, Label, Legend } from '@headlessui/react'
 import { AskAIProvider } from './AskAIProvider'
 import { useAskAI } from './context'
@@ -27,40 +27,66 @@ export function AskAIMessageContent() {
   }} />
 }
 /**
- * Unstyled actions for the enclosing assistant message: copy its text and regenerate it.
- * Hidden while a response runs; on earlier messages only while hovered or focused.
- * Regenerate is disabled without a provider. `copy`, `copied` and `regenerate` replace the labels.
- * Hidden actions keep their place (`visibility: hidden`, `data-hidden`), so hovering a message
- * never changes the conversation's height or shows and hides its scrollbar.
+ * Unstyled actions for the enclosing message. An assistant message's: copy its text and
+ * regenerate it, which adds another version of it. A user message's: edit it, which sends the
+ * edited message as another version of it and answers that. Hidden while a response runs; on
+ * earlier messages only while hovered or focused. Regenerate and edit are disabled without a
+ * provider. `copy`, `copied`, `regenerate` and `edit` replace the labels. Hidden actions keep
+ * their place (`visibility: hidden`, `data-hidden`), so hovering a message never changes the
+ * conversation's height or shows and hides its scrollbar.
  */
-export function AskAIMessageActions({ copy = 'Copy response', copied = 'Copied', regenerate = 'Regenerate response', style, ...props }:
-  Omit<ComponentPropsWithoutRef<typeof ActionBarPrimitive.Root>, 'children'> & { copy?: ReactNode; copied?: ReactNode; regenerate?: ReactNode }) {
+export function AskAIMessageActions({ copy = 'Copy response', copied = 'Copied', regenerate = 'Regenerate response', edit = 'Edit message', style, ...props }:
+  Omit<ComponentPropsWithoutRef<typeof ActionBarPrimitive.Root>, 'children'> & { copy?: ReactNode; copied?: ReactNode; regenerate?: ReactNode; edit?: ReactNode }) {
   const { connection } = useAskAI()
+  const role = useAuiState(state => state.message.role)
   const isCopied = useAuiState(state => state.message.isCopied)
   const hidden = useAuiState(state => state.thread.isRunning || (!state.message.isLast && !state.message.isHovering))
   return <ActionBarPrimitive.Root data-byok="message-actions" data-hidden={hidden || undefined} {...props}
     style={hidden ? { ...style, visibility: 'hidden' } : style}>
-    <ActionBarPrimitive.Copy data-byok="message-copy">{isCopied ? copied : copy}</ActionBarPrimitive.Copy>
-    <ActionBarPrimitive.Reload data-byok="message-regenerate" disabled={!connection}>{regenerate}</ActionBarPrimitive.Reload>
+    {role === 'user' ? <ActionBarPrimitive.Edit data-byok="message-edit" disabled={!connection}>{edit}</ActionBarPrimitive.Edit> : <>
+      <ActionBarPrimitive.Copy data-byok="message-copy">{isCopied ? copied : copy}</ActionBarPrimitive.Copy>
+      <ActionBarPrimitive.Reload data-byok="message-regenerate" disabled={!connection}>{regenerate}</ActionBarPrimitive.Reload>
+    </>}
   </ActionBarPrimitive.Root>
 }
-function ImageThumb() {
+/**
+ * The versions of the enclosing message, where a regenerated answer or an edited message added
+ * another: previous and next buttons around "2 / 5". Showing one shows its branch, the
+ * conversation that follows it. Renders nothing for a message with one version. `previous` and
+ * `next` replace the buttons' contents; their accessible names stay "Previous version" and
+ * "Next version".
+ */
+export function AskAIBranchPicker({ previous = 'Previous', next = 'Next', ...props }: Omit<ComponentPropsWithoutRef<'div'>, 'children'> & { previous?: ReactNode; next?: ReactNode }) {
+  const aui = useAui()
+  const number = useAuiState(state => state.message.branchNumber)
+  const count = useAuiState(state => state.message.branchCount)
+  if (count <= 1) return null
+  return <div data-byok="branch-picker" role="group" aria-label="Versions" {...props}>
+    <Button type="button" data-byok="branch-previous" aria-label="Previous version" disabled={number <= 1}
+      onClick={() => aui.message.switchToBranch({ position: 'previous' })}>{previous}</Button>
+    <span data-byok="branch-count">{number} / {count}</span>
+    <Button type="button" data-byok="branch-next" aria-label="Next version" disabled={number >= count}
+      onClick={() => aui.message.switchToBranch({ position: 'next' })}>{next}</Button>
+  </div>
+}
+// An image, with a remove button in a composer (the message box, or a message being edited).
+function ImageThumb({ removable }: { removable: boolean }) {
   const { src, name, missing } = useAskAIImage()
-  const sent = useAuiState(state => state.attachment.status.type === 'complete')
   return <AttachmentPrimitive.Root data-byok="image" data-missing={missing || undefined}>
     {src ? <img src={src} alt={name} /> : <span>{missing ? `${name} (no longer stored)` : name}</span>}
-    {!sent && <AttachmentPrimitive.Remove data-byok="image-remove" aria-label={`Remove ${name}`}>Remove</AttachmentPrimitive.Remove>}
+    {removable && <AttachmentPrimitive.Remove data-byok="image-remove" aria-label={`Remove ${name}`}>Remove</AttachmentPrimitive.Remove>}
   </AttachmentPrimitive.Root>
 }
 // Images only: a message's page elements are AskAIComposerElements' and AskAIMessageElements'.
-const IMAGE_COMPONENTS = { Image: ImageThumb }
+const COMPOSER_IMAGES = { Image: () => <ImageThumb removable /> }
+const MESSAGE_IMAGES = { Image: () => <ImageThumb removable={false} /> }
 /** The images attached in the composer, each with a remove button. Use inside a composer. */
 export function AskAIComposerImages() {
-  return <div data-byok="composer-images"><ComposerPrimitive.Attachments components={IMAGE_COMPONENTS} /></div>
+  return <div data-byok="composer-images"><ComposerPrimitive.Attachments components={COMPOSER_IMAGES} /></div>
 }
 /** The images sent with the enclosing user message. */
 export function AskAIMessageImages() {
-  return <div data-byok="message-images"><MessagePrimitive.Attachments components={IMAGE_COMPONENTS} /></div>
+  return <div data-byok="message-images"><MessagePrimitive.Attachments components={MESSAGE_IMAGES} /></div>
 }
 /**
  * Opens the file picker for images. Renders nothing while images can't be attached (the `images`
@@ -77,8 +103,25 @@ function Message() {
   const role = useAuiState(state => state.message.role)
   return <MessagePrimitive.Root data-byok="message" data-role={role}>
     {role === 'user' && <><AskAIMessageImages /><AskAIMessageElements /></>}
-    <AskAIMessageContent />{role === 'assistant' && <AskAIMessageActions />}
+    <AskAIMessageContent />
+    <AskAIBranchPicker /><AskAIMessageActions />
   </MessagePrimitive.Root>
+}
+/**
+ * The enclosing user message while it is edited: its text in a box, its images and page
+ * elements (each can be removed), Cancel, and Send, which sends the edited message as another
+ * version of it and answers that; the earlier version stays, a branch away. Enter sends and
+ * Escape cancels. Sending waits while a response runs. The default `EditComposer`.
+ */
+export function AskAIEditComposer() {
+  const { connection } = useAskAI()
+  return <ComposerPrimitive.Root data-byok="edit-composer">
+    <AskAIComposerImages />
+    <AskAIComposerElements />
+    <ComposerPrimitive.Input aria-label="Edit message" autoFocus addAttachmentOnPaste={false} />
+    <ComposerPrimitive.Cancel data-byok="edit-cancel">Cancel</ComposerPrimitive.Cancel>
+    <ThreadPrimitive.If running={false}><ComposerPrimitive.Send data-byok="edit-send" disabled={!connection}>Send</ComposerPrimitive.Send></ThreadPrimitive.If>
+  </ComposerPrimitive.Root>
 }
 function DefaultEmpty() { return <p>Start a conversation.</p> }
 function DefaultComposer() {
@@ -106,6 +149,7 @@ export function AskAIChat({ components }: AskAIChatProps = {}) {
       <ThreadPrimitive.Messages components={{
         UserMessage: components?.UserMessage ?? Message,
         AssistantMessage: components?.AssistantMessage ?? Message,
+        UserEditComposer: components?.EditComposer ?? AskAIEditComposer,
       }} />
     </ThreadPrimitive.Viewport>
     {error && <p role="alert">{error}</p>}

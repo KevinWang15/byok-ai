@@ -90,7 +90,7 @@ test('attaching: images are prepared on add, saved on send, and limited per mess
 test('saved user messages keep only well-formed image attachments', () => {
   const store = (attachments: unknown) => {
     const message = { id: 'm', role: 'user', createdAt: new Date().toISOString(), content: [{ type: 'text', text: 'hi' }], attachments, metadata: { custom: {} } }
-    const values = new Map([['k', JSON.stringify({ conversations: [{ id: 'c', title: 't', updatedAt: 1, draft: '', messages: [message] }] })]])
+    const values = new Map([['k', JSON.stringify({ conversations: [{ id: 'c', title: 't', updatedAt: 1, draft: '', messages: [{ message, parentId: null }], headId: message.id }] })]])
     Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: (key: string) => values.get(key) ?? null } })
     return loadConversations('k').data.conversations.length
   }

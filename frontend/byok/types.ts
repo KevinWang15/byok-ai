@@ -105,6 +105,8 @@ export interface AskAIChatProps {
     /** Layout slots run inside the existing assistant-ui runtime and message scopes. */
     UserMessage?: ComponentType
     AssistantMessage?: ComponentType
+    /** Replaces a user message while it is being edited (default AskAIEditComposer). */
+    EditComposer?: ComponentType
     Empty?: ComponentType
     Composer?: ComponentType
   }

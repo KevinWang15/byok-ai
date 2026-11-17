@@ -2,7 +2,7 @@ import { useId } from 'react'
 import { Button, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
 import { ComposerPrimitive, MessagePrimitive, ThreadPrimitive, groupPartByType, type ToolCallMessagePartProps } from '@assistant-ui/react'
 import {
-  AskAIAddFromPage, AskAIAddImage, AskAIChat, AskAIComposerElements, AskAIComposerImages, AskAIHistory, AskAIMessageActions, AskAIMessageContent,
+  AskAIAddFromPage, AskAIAddImage, AskAIBranchPicker, AskAIChat, AskAIComposerElements, AskAIComposerImages, AskAIHistory, AskAIMessageActions, AskAIMessageContent,
   AskAIMessageElements, AskAIMessageImages, usePanelLayout,
   AskAIPanel, AskAITrigger, MarkdownText, useAskAI, type ResizeEdge,
 } from '../byok'
@@ -15,9 +15,35 @@ import { DemoProviderSetup } from './DemoProviderSetup'
 function IconButton({ label, icon, disabled, onClick }: { label: string; icon: DemoIconName; disabled?: boolean; onClick: () => void }) {
   return <Button className="chat-icon-button" title={label} aria-label={label} disabled={disabled} onClick={onClick}><Icon name={icon} /></Button>
 }
+// Under a message: its versions, where there are several, and its actions.
+function MessageFooter() {
+  return <div className="chat-message-footer">
+    <AskAIBranchPicker className="chat-branch-picker" previous={<Icon name="chevronLeft" />} next={<Icon name="chevron" />} />
+    <AskAIMessageActions className="chat-message-actions"
+      copy={<><Icon name="copy" /><span>Copy</span></>} copied={<><Icon name="check" /><span>Copied</span></>}
+      regenerate={<><Icon name="regenerate" /><span>Regenerate</span></>} edit={<><Icon name="edit" /><span>Edit</span></>} />
+  </div>
+}
 function DemoUserMessage() {
   return <MessagePrimitive.Root data-byok="message" data-role="user" className="chat-user-message">
     <span className="chat-message-label">You</span><AskAIMessageImages /><AskAIMessageElements /><div className="chat-user-bubble"><AskAIMessageContent /></div>
+    <MessageFooter />
+  </MessagePrimitive.Root>
+}
+// A user message being edited: in place of its bubble, a box with its text, images and page elements.
+function DemoEditComposer() {
+  const { connection } = useAskAI()
+  return <MessagePrimitive.Root data-byok="message" data-role="user" className="chat-user-message">
+    <span className="chat-message-label">You</span>
+    <ComposerPrimitive.Root className="chat-edit">
+      <AskAIComposerElements />
+      <AskAIComposerImages />
+      <ComposerPrimitive.Input aria-label="Edit message" autoFocus addAttachmentOnPaste={false} />
+      <div className="chat-edit-actions">
+        <ComposerPrimitive.Cancel className="chat-edit-cancel">Cancel</ComposerPrimitive.Cancel>
+        <ThreadPrimitive.If running={false}><ComposerPrimitive.Send className="chat-edit-send" disabled={!connection}>Send</ComposerPrimitive.Send></ThreadPrimitive.If>
+      </div>
+    </ComposerPrimitive.Root>
   </MessagePrimitive.Root>
 }
 const toolGroups = groupPartByType({ 'tool-call': ['group-tools'] })
@@ -65,9 +91,7 @@ function DemoAssistantMessage() {
           default: return null
         }
       }}</MessagePrimitive.GroupedParts>
-      <AskAIMessageActions className="chat-message-actions"
-        copy={<><Icon name="copy" /><span>Copy</span></>} copied={<><Icon name="check" /><span>Copied</span></>}
-        regenerate={<><Icon name="regenerate" /><span>Regenerate</span></>} />
+      <MessageFooter />
     </div>
   </MessagePrimitive.Root>
 }
@@ -99,7 +123,7 @@ function DemoComposer() {
     </ComposerPrimitive.Root>
   </div>
 }
-const chatComponents = { UserMessage: DemoUserMessage, AssistantMessage: DemoAssistantMessage, Empty: DemoEmpty, Composer: DemoComposer }
+const chatComponents = { UserMessage: DemoUserMessage, AssistantMessage: DemoAssistantMessage, EditComposer: DemoEditComposer, Empty: DemoEmpty, Composer: DemoComposer }
 const edges: [ResizeEdge, string][] = [
   ['n', 'top'], ['s', 'bottom'], ['e', 'right'], ['w', 'left'],
   ['ne', 'top right'], ['nw', 'top left'], ['se', 'bottom right'], ['sw', 'bottom left'],

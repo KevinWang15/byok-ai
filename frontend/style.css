@@ -152,7 +152,25 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 .chat-tool-json strong { font-size: 9px; font-weight: 550; }
 .chat-tool-json pre { font-size: 9px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 160px; overflow: auto; }
 /* A faint bar: visible on the latest answer, on earlier ones while hovered or focused (the library hides it otherwise). */
-.chat-message-actions { display: inline-flex; gap: 1px; margin-top: 9px; padding: 2px; border: 1px solid #f1ebf5; border-radius: 8px; background: #fcfaFE; }
+/* Under a message: its versions ("< 2 / 3 >", only where there are several), then its actions. */
+.chat-message-footer { display: flex; align-items: center; gap: 6px; margin-top: 9px; }
+/* A question's footer keeps the room its Edit button takes when hovered: the gap after it is that room. */
+.chat-user-message .chat-message-footer { justify-content: flex-end; margin-top: 4px; }
+.demo-chat-shell [data-byok="message"].chat-user-message { margin-bottom: 8px; }
+.chat-branch-picker { display: inline-flex; align-items: center; gap: 1px; color: #a593b2; font-size: 10px; font-variant-numeric: tabular-nums; }
+.chat-branch-picker button { display: grid; place-items: center; width: 22px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: inherit; }
+.chat-branch-picker button svg { width: 13px; height: 13px; }
+.chat-branch-picker button:hover:not(:disabled) { background: #f2ecf7; color: #7e6a8d; }
+.chat-branch-picker button:disabled { opacity: .35; }
+.chat-branch-picker [data-byok="branch-count"] { min-width: 30px; text-align: center; }
+.chat-edit { display: flex; flex-direction: column; gap: 8px; align-self: stretch; padding: 10px 12px; border: 1px solid #cdbbdd; border-radius: 14px; background: #fff; box-shadow: 0 0 0 3px #f5f0fa; }
+.chat-edit textarea { border: 0; outline: 0!important; background: none; color: #584660; font-size: 13px; line-height: 1.6; resize: none; width: 100%; min-height: 32px; max-height: 200px; padding: 2px 0; }
+.chat-edit-actions { display: flex; justify-content: flex-end; gap: 6px; }
+.chat-edit-actions button { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; font-size: 11px; }
+.chat-edit-cancel { background: #f5f0fa; color: #7e6a8d; }
+.chat-edit-send { background: #7e6a8d; color: #fff; }
+.chat-edit-send:disabled { opacity: .45; }
+.chat-message-actions { display: inline-flex; gap: 1px; padding: 2px; border: 1px solid #f1ebf5; border-radius: 8px; background: #fcfaFE; }
 .chat-message-actions button { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: #a593b2!important; font-size: 10px!important; }
 .chat-message-actions button svg { width: 12px; height: 12px; }
 .chat-message-actions button:hover:not(:disabled) { background: #f2ecf7; color: #7e6a8d!important; }
