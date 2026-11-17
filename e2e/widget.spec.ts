@@ -20,7 +20,12 @@ const message = (id: string, role: 'user' | 'assistant', content: unknown[], cre
   ...(role === 'assistant' ? { status: { type: 'complete', reason: 'stop' } } : {}),
 })
 const text = (id: string, role: 'user' | 'assistant', value: string, createdAt?: string) => message(id, role, [{ type: 'text', text: value }], createdAt)
-const conversation = (id: string, title: string, messages: unknown[], { updatedAt = Date.now(), draft = '' } = {}) => ({ id, title, updatedAt, draft, messages })
+// A conversation of one branch: each message follows the one before it.
+const conversation = (id: string, title: string, messages: { id: string }[], { updatedAt = Date.now(), draft = '' } = {}) => ({
+  id, title, updatedAt, draft,
+  messages: messages.map((message, index) => ({ message, parentId: index ? messages[index - 1]!.id : null })),
+  headId: messages.at(-1)?.id ?? null,
+})
 
 // An OpenAI-compatible streaming response.
 const chunk = (delta: unknown, finish: string | null = null) => ({ id: 'test', object: 'chat.completion.chunk', created: 1, model: 'test', choices: [{ index: 0, delta, finish_reason: finish }] })
@@ -1130,4 +1135,172 @@ test('an element that declares its data twice is not offered, and the console sa
   await expect(page.locator('[data-byok="page-picker-description"]')).toHaveText('How it works: the three steps of using byok-ai')
   await page.keyboard.press('Escape')
   expect(warnings.filter(text => /sets data-ai-context-data and data-ai-context-source; an element has at most one of them/.test(text))).toHaveLength(1)
+})
+
+// Versions and branches: regenerating an answer or editing a message adds a version of it; the
+// picker under a message shows each, and the model sees only the branch it answers on.
+type Prompt = { role: string; content: unknown }[]
+const promptText = (message: Prompt[number]) => typeof message.content === 'string' ? message.content
+  : (message.content as { type: string; text?: string }[]).flatMap(part => part.type === 'text' ? [part.text ?? ''] : []).join(' ')
+const turns = (prompt: Prompt) => prompt.filter(m => m.role !== 'system').map(m => `${m.role}: ${promptText(m)}`)
+const byRole = (page: Page, role: 'user' | 'assistant', index: number) => page.locator(`[data-byok="message"][data-role="${role}"]`).nth(index)
+const shown = (page: Page) => page.locator('[data-byok="message"]').evaluateAll(list => list.map(m => {
+  const text = (m.querySelector('.chat-user-bubble, [data-byok="markdown"]')?.textContent ?? '').trim()
+  const count = m.querySelector('[data-byok="branch-count"]')?.textContent
+  return text + (count ? ` (${count})` : '')
+}))
+
+test('regenerating and editing add versions; each branch is shown and answered on its own, and all come back after a reload', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  const prompts: Prompt[] = []
+  await page.route(MODEL, route => {
+    prompts.push(route.request().postDataJSON().messages)
+    return route.fulfill(answer(`Answer ${prompts.length}.`))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  await messageBox(page).fill('Q1')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('Answer 1.', { exact: true })).toBeVisible()
+  // One version: no picker.
+  await expect(page.locator('[data-byok="branch-picker"]')).toHaveCount(0)
+
+  await byRole(page, 'assistant', 0).getByRole('button', { name: 'Regenerate' }).click()
+  await expect.poll(() => shown(page)).toEqual(['Q1', 'Answer 2. (2 / 2)'])
+  expect(turns(prompts[1]!)).toEqual(['user: Q1'])
+  await byRole(page, 'assistant', 0).getByRole('button', { name: 'Previous version' }).click()
+  await expect.poll(() => shown(page)).toEqual(['Q1', 'Answer 1. (1 / 2)'])
+  await expect(byRole(page, 'assistant', 0).getByRole('button', { name: 'Previous version' })).toBeDisabled()
+  await byRole(page, 'assistant', 0).getByRole('button', { name: 'Next version' }).click()
+  await messageBox(page).fill('Q2')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect.poll(() => shown(page)).toEqual(['Q1', 'Answer 2. (2 / 2)', 'Q2', 'Answer 3.'])
+  // The follow-up is answered on the branch shown: after the second answer, not the first.
+  expect(turns(prompts[2]!)).toEqual(['user: Q1', 'assistant: Answer 2.', 'user: Q2'])
+
+  // Editing the first message: its text in a box; Cancel changes nothing.
+  await byRole(page, 'user', 0).hover()
+  await byRole(page, 'user', 0).getByRole('button', { name: 'Edit' }).click()
+  const editBox = page.getByRole('textbox', { name: 'Edit message' })
+  await expect(editBox).toHaveValue('Q1')
+  await expect(editBox).toBeFocused()
+  await editBox.fill('Never sent')
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect.poll(() => shown(page)).toEqual(['Q1', 'Answer 2. (2 / 2)', 'Q2', 'Answer 3.'])
+  expect(prompts).toHaveLength(3)
+
+  await byRole(page, 'user', 0).hover()
+  await byRole(page, 'user', 0).getByRole('button', { name: 'Edit' }).click()
+  await editBox.fill('Q1 edited')
+  await editBox.press('Enter')
+  await expect.poll(() => shown(page)).toEqual(['Q1 edited (2 / 2)', 'Answer 4.'])
+  // The edited message starts a branch: nothing after the original goes with it.
+  expect(turns(prompts[3]!)).toEqual(['user: Q1 edited'])
+  await byRole(page, 'user', 0).getByRole('button', { name: 'Previous version' }).click()
+  await expect.poll(() => shown(page)).toEqual(['Q1 (1 / 2)', 'Answer 2. (2 / 2)', 'Q2', 'Answer 3.'])
+
+  // After a reload: every version, the branch shown, and the first message's title.
+  await page.reload()
+  await openChat(page)
+  await expect.poll(() => shown(page)).toEqual(['Q1 (1 / 2)', 'Answer 2. (2 / 2)', 'Q2', 'Answer 3.'])
+  await byRole(page, 'user', 0).getByRole('button', { name: 'Next version' }).click()
+  await expect.poll(() => shown(page)).toEqual(['Q1 edited (2 / 2)', 'Answer 4.'])
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('byok-ai:conversations')!).conversations[0])
+  expect(saved.title).toBe('Q1')
+  expect(saved.messages).toHaveLength(7)
+  await page.getByRole('button', { name: 'Conversation history' }).click()
+  await expect(page.locator('[data-byok="history-meta"]').first()).toContainText('2 messages')
+  expect(errors).toEqual([])
+})
+
+test('an edited message keeps its image and page elements; one removed in the edit is left out of the new version', async ({ page }) => {
+  const prompts: Prompt[] = []
+  await page.route(MODEL, route => {
+    prompts.push(route.request().postDataJSON().messages)
+    return route.fulfill(answer(`Answer ${prompts.length}.`))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  const png = await page.evaluate(async () => {
+    const canvas = new OffscreenCanvas(8, 8)
+    canvas.getContext('2d')!.fillRect(0, 0, 8, 8)
+    return btoa(String.fromCharCode(...new Uint8Array(await (await canvas.convertToBlob({ type: 'image/png' })).arrayBuffer())))
+  })
+  await openChat(page)
+  const chooser = page.waitForEvent('filechooser')
+  await page.getByRole('button', { name: 'Attach image' }).click()
+  await (await chooser).setFiles({ name: 'dot.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
+  await page.getByRole('button', { name: 'Add from page', exact: true }).click()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: '1 element', exact: true })).toBeVisible()
+  await messageBox(page).fill('Look')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('Answer 1.', { exact: true })).toBeVisible()
+  const parts = (prompt: Prompt) => {
+    const user = prompt.find(m => m.role === 'user')!
+    const content = typeof user.content === 'string' ? [{ type: 'text', text: user.content }] : user.content as { type: string; text?: string }[]
+    return { images: content.filter(p => p.type === 'image_url').length, elements: content.flatMap(p => [...(p.text ?? '').matchAll(/^- ([a-f0-9]{32}):/gm)]).length }
+  }
+  expect(parts(prompts[0]!)).toEqual({ images: 1, elements: 1 })
+
+  await byRole(page, 'user', 0).hover()
+  await byRole(page, 'user', 0).getByRole('button', { name: 'Edit' }).click()
+  const edit = page.locator('.chat-edit')
+  await expect(edit.getByRole('img', { name: 'dot.png' })).toBeVisible()
+  await edit.getByRole('button', { name: '1 element', exact: true }).click()
+  await edit.getByRole('button', { name: /^Remove “/ }).click()
+  await expect(edit.locator('[data-byok="page-elements"]')).toHaveCount(0)
+  await edit.getByRole('textbox', { name: 'Edit message' }).fill('Look again')
+  await edit.getByRole('button', { name: 'Send', exact: true }).click()
+  await expect(page.getByText('Answer 2.', { exact: true })).toBeVisible()
+  expect(parts(prompts[1]!)).toEqual({ images: 1, elements: 0 })
+  expect(turns(prompts[1]!)).toEqual([expect.stringMatching(/^user: Look again/)])
+  // The message box was left alone, and the earlier version keeps its element.
+  await expect(page.locator('[data-byok="composer-images"] [data-byok="image"]')).toHaveCount(0)
+  await byRole(page, 'user', 0).getByRole('button', { name: 'Previous version' }).click()
+  await expect(byRole(page, 'user', 0).getByRole('button', { name: '1 element', exact: true })).toBeVisible()
+  await expect(byRole(page, 'user', 0).getByRole('img', { name: 'dot.png' })).toBeVisible()
+})
+
+test('while an answer is written, its versions can be shown and edits wait to be sent', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  let release = () => {}
+  const held = new Promise<void>(resolve => { release = resolve })
+  let calls = 0
+  await page.route(MODEL, async route => {
+    calls++
+    if (calls === 2) await held
+    return route.fulfill(answer(`Answer ${calls}.`))
+  })
+  await seed(page, {})
+  await page.goto('/')
+  await openChat(page)
+  await messageBox(page).fill('Q1')
+  await page.getByRole('button', { name: 'Send message', exact: true }).click()
+  await expect(page.getByText('Answer 1.', { exact: true })).toBeVisible()
+
+  // An edit open when an answer starts can't be sent until it is done.
+  await byRole(page, 'user', 0).hover()
+  await byRole(page, 'user', 0).getByRole('button', { name: 'Edit' }).click()
+  await byRole(page, 'assistant', 0).hover()
+  await byRole(page, 'assistant', 0).getByRole('button', { name: 'Regenerate' }).click()
+  await expect(page.getByRole('button', { name: 'Stop response' })).toBeVisible()
+  const edit = page.locator('.chat-edit')
+  await expect(edit.getByRole('button', { name: 'Send', exact: true })).toHaveCount(0)
+  await edit.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+  // The version being written is the second; the first can be shown meanwhile.
+  await expect(byRole(page, 'assistant', 0).locator('[data-byok="branch-count"]')).toHaveText('2 / 2')
+  await byRole(page, 'assistant', 0).getByRole('button', { name: 'Previous version' }).click()
+  await expect.poll(() => shown(page)).toEqual(['Q1', 'Answer 1. (1 / 2)'])
+  release()
+  await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeVisible()
+  await expect.poll(() => shown(page)).toEqual(['Q1', 'Answer 1. (1 / 2)'])
+  await byRole(page, 'assistant', 0).getByRole('button', { name: 'Next version' }).click()
+  await expect.poll(() => shown(page)).toEqual(['Q1', 'Answer 2. (2 / 2)'])
+  expect(errors).toEqual([])
 })
