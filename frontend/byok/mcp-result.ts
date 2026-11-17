@@ -14,11 +14,15 @@ export function mcpError(result: unknown): string | undefined {
   if (isRecord(result) && result.isError) return 'The tool reported an error: ' + mcpText(result.content).slice(0, 2000)
 }
 
-/** An MCP result as a value: its structured content when it has some, else its text. Throws the error it reports. */
+/**
+ * An MCP result as a value: its structured content when it has some, else its text, read as JSON
+ * when it is JSON (tools often return JSON as text). Throws the error it reports.
+ */
 export function mcpValue(result: unknown): unknown {
   const error = mcpError(result)
   if (error) throw new Error(error)
   if (!isRecord(result)) return result
   if (result.structuredContent !== undefined) return result.structuredContent
-  return mcpText(result.content)
+  const text = mcpText(result.content)
+  try { return JSON.parse(text) } catch { return text }
 }

@@ -197,10 +197,19 @@ An element has at most one of the last two. With neither, its description is all
 
 A read expression runs as page code, in the global scope and in strict mode, with two more names in scope:
 
-- `MCP(name, params)` calls one of the answer's MCP tools by its full name (`serverId__toolName`) with an object of arguments, through the same connection and headers as the model's calls. It returns a promise of the tool's structured content, or of its text when it has none, and rejects when the tool reports an error.
+- `MCP(name, params)` calls one of the answer's MCP tools by its full name (`serverId__toolName`) with an object of arguments, through the same connection and headers as the model's calls. It returns a promise of the tool's structured content, or of its text when it has none (read as JSON when the text is JSON, as tools often return it), and rejects when the tool reports an error.
 - `element` is the element being read.
 
-A read may take 60 seconds, MCP calls included, and Stop stops the answer from waiting for it.
+The value may be an object or array with promises in it, at any depth, and each is awaited, in parallel. A panel can then read as several calls at once, one per part it shows. A nested promise that fails becomes `{ "error": "…" }` in its place, so the other parts still arrive:
+
+```tsx
+<section data-ai-context="Overview: every card" data-ai-context-read={`({
+  totals: MCP("stats__overview", ${JSON.stringify(params)}),
+  byModel: MCP("stats__breakdown", ${JSON.stringify({ ...params, dimension: 'model' })}),
+})`}>…</section>
+```
+
+Build expressions from your own values as JSON (`JSON.stringify` gives a JavaScript literal), never by pasting text from the page into code. A read may take 60 seconds, MCP calls included, and Stop stops the answer from waiting for it.
 
 The message tells the model which elements were added. For each one it gives the id, the description, and the descriptions of the described elements it is inside, recorded when it was picked:
 

@@ -175,3 +175,21 @@ test('a policy that refuses compiled code says so, rather than blaming the expre
     await assert.rejects(read({ [A.description]: 'X', [A.read]: '1' }), /Content-Security-Policy doesn't allow data-ai-context-read \(it needs 'unsafe-eval'\)/)
   } finally { globalThis.Function = original }
 })
+
+test('a read can be an object of promises, each awaited; one that fails becomes { error } in its place', async () => {
+  const tools: ToolSet = {
+    docs__totals: { inputSchema: {} as never, execute: async (input: unknown) => ({ content: [{ type: 'text', text: JSON.stringify({ total: 7, asked: input }) }] }) },
+    docs__words: { inputSchema: {} as never, execute: async () => ({ content: [{ type: 'text', text: 'plain words' }] }) },
+    docs__broken: { inputSchema: {} as never, execute: async () => ({ isError: true, content: [{ type: 'text', text: 'no access' }] }) },
+  }
+  const mcp = mcpCall({ tools: () => tools, isMcp: name => name.startsWith('docs__'), callOptions: { toolCallId: 't', messages: [], context: {} } })
+  const expression = '({ totals: MCP("docs__totals", { range: "7d" }), words: MCP("docs__words"), broken: MCP("docs__broken"), parts: [MCP("docs__totals"), 2], fixed: "x" })'
+  assert.deepEqual(await read({ [A.description]: 'Panel', [A.read]: expression }, { mcp }), { description: 'Panel', data: {
+    // JSON text from a tool reads as JSON; other text stays text.
+    totals: { total: 7, asked: { range: '7d' } }, words: 'plain words',
+    broken: { error: 'The tool reported an error: no access' },
+    parts: [{ total: 7, asked: {} }, 2], fixed: 'x',
+  } })
+  // The read as a whole still fails when its own value does.
+  await assert.rejects(read({ [A.description]: 'Panel', [A.read]: 'MCP("docs__broken")' }, { mcp }), /failed: The tool reported an error: no access/)
+})

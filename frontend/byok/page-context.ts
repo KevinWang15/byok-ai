@@ -16,7 +16,8 @@ import { SAVED_RESULT, WORKSPACE_ID, type SavableTool } from './workspace-tools'
 // added on its own, with it, or not at all, and reading one gives only its own data.
 // A read expression runs as page code, with `MCP(name, params)` (calls one of this answer's MCP
 // tools, returns a promise) and `element` in scope; its value, or what its promise resolves to,
-// is the data, as JSON.
+// is the data, as JSON. Promises inside the value's objects and arrays are awaited too, so a
+// panel can read as { totals: MCP(…), trend: MCP(…) }; one that fails becomes { error }.
 //
 // A message holds what was added as attachments (type 'page-element'): an id, the description,
 // and the descriptions of the elements it is inside, nothing read. The model reads one with
@@ -174,6 +175,23 @@ function compile(code: string): Read {
   }
 }
 
+// The value with every promise in it awaited, in parallel: the value itself, and those in its plain
+// objects and arrays at any depth (a panel's read can be an object of MCP() calls, one per part).
+// A nested promise that rejects becomes { error } in its place, so one failed part leaves the rest.
+async function settled(value: unknown, depth = 0): Promise<unknown> {
+  if (depth > 8) return value
+  if (value instanceof Promise) return settled(await value, depth + 1)
+  const nested = async (item: unknown) => {
+    try { return await settled(item, depth + 1) } catch (error) { return { error: errorText(error) } }
+  }
+  if (Array.isArray(value)) return Promise.all(value.map(nested))
+  if (typeof value === 'object' && value !== null && Object.getPrototypeOf(value) === Object.prototype) {
+    const entries = await Promise.all(Object.entries(value).map(async ([key, item]) => [key, await nested(item)] as const))
+    return Object.fromEntries(entries)
+  }
+  return value
+}
+
 // The value as JSON data. A string stays as it is.
 function asData(value: unknown): unknown {
   if (value === undefined) throw new Error(`The element's ${PAGE_CONTEXT_ATTRIBUTES.read} returned nothing.`)
@@ -204,7 +222,7 @@ export async function readPageElement(element: Element, options: { mcp: McpCall;
   stopped.catch(() => {})
   let value: unknown
   try {
-    value = await Promise.race([Promise.resolve().then(() => read(options.mcp, element)), stopped])
+    value = await Promise.race([Promise.resolve().then(() => settled(read(options.mcp, element))), stopped])
   } catch (error) {
     if (limits.aborted) throw error
     throw new Error(`The element's ${PAGE_CONTEXT_ATTRIBUTES.read} failed: ${errorText(error)}`, { cause: error })
