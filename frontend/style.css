@@ -316,7 +316,8 @@ html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
 [data-byok="page-picker-outer"][hidden], [data-byok="page-picker-inner"][hidden] { display: none; }
 [data-byok="page-picker-hint"] { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); width: max-content; max-width: min(560px, calc(100vw - 32px)); padding: 10px 16px; border-radius: 12px; background: #3d364a; color: #fff; font: 12px/1.5 Inter, sans-serif; text-align: center; box-shadow: 0 10px 30px #3d364a40; pointer-events: none; }
 
-[data-byok="page-mark"] { box-sizing: border-box; z-index: 40; border: 2px dashed #8b6fb0; border-radius: 8px; }
+/* Marks are in the page's layer: over the content, under the launcher (40) and the panel. */
+[data-byok="page-mark"] { box-sizing: border-box; z-index: 5; border: 2px dashed #8b6fb0; border-radius: 8px; }
 [data-byok="page-mark-label"] { position: absolute; left: -2px; bottom: calc(100% + 4px); max-width: min(360px, calc(100% - 24px)); }
 [data-byok="page-mark-remove"] { position: absolute; top: -11px; right: -11px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 2px solid #fff; border-radius: 50%; background: #8b6fb0; color: #fff; font: 600 14px/1 Inter, sans-serif; cursor: pointer; box-shadow: 0 2px 8px #3d364a40; }
 [data-byok="page-mark-remove"]:hover { background: #6d5f89; }

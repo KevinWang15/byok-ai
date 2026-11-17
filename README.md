@@ -235,14 +235,14 @@ The picker and the marks ship no CSS, apart from what places them. Style them by
 
 - `page-picker` covers the viewport. Inside it are `page-picker-highlight`, `page-picker-label` and `page-picker-hint` (a status line).
 - The label holds `page-picker-outer` (↑), `page-picker-description` and `page-picker-inner` (↓). Each button is `hidden` when there is no element in its direction.
-- Each `page-mark` is a fixed box over its element that lets the pointer through. It holds `page-mark-label` and `page-mark-remove`. Give marks a `z-index` below your panel's.
+- Each `page-mark` is a fixed box over its element that lets the pointer through. It holds `page-mark-label` and `page-mark-remove`. A mark outlines a part of the page, so give it the page's layer: a `z-index` above anything inside your content (sticky table headers, say) and below everything over it (a sticky header, menus, dialogs, your panel). Mind stacking contexts: a panel inside a sticky header is only as high as the header.
 - A mark whose element is inside another marked element is `data-nested`. It is also `data-crowded` when its top is within its label's height of that element's top, so the two labels and remove buttons would overlap. Move a crowded mark's label and button inside its border.
 - The composer's list is `page-elements`, with `page-elements-summary` and one `page-element` per element. Each holds its description, a `page-element-place` naming the elements it is inside (when it is inside any), and `page-element-remove`.
 
 ```css
 [data-byok="page-picker-highlight"] { border: 2px solid #7c5cbf; background: #7c5cbf22; }
 [data-byok="page-picker-label"], [data-byok="page-picker-hint"] { background: #222; color: #fff; padding: 4px 8px; }
-[data-byok="page-mark"] { z-index: 40; border: 2px dashed #7c5cbf; }
+[data-byok="page-mark"] { z-index: 5; border: 2px dashed #7c5cbf; }
 [data-byok="page-mark-label"] { position: absolute; bottom: 100%; left: 0; }
 [data-byok="page-mark-remove"] { position: absolute; top: -10px; right: -10px; }
 [data-byok="page-mark"][data-crowded] [data-byok="page-mark-label"] { top: 4px; bottom: auto; left: 4px; }
