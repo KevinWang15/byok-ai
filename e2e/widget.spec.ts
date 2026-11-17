@@ -892,7 +892,7 @@ async function pickWithMouse(page: Page, target: ReturnType<Page['locator']>) {
   await expect(page.locator('[data-byok="page-picker"]')).toHaveCount(0)
 }
 
-test('elements chosen from the page go with the message, and the model reads them through MCP and the page\'s own code', async ({ page }) => {
+test('elements chosen from the page go with the message, and the model reads them through MCP and the page\'s readers', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', e => errors.push(e.message))
   const prompts: { role: string; content: unknown }[][] = []
@@ -964,7 +964,7 @@ test('elements chosen from the page go with the message, and the model reads the
   expect(errors).toEqual([])
 })
 
-test('a page element\'s own code reads the page, and the model is told when an element is gone', async ({ page }) => {
+test('a page reader reads the page, and the model is told when an element is gone', async ({ page }) => {
   const results: unknown[] = []
   let ids: string[] = []
   await page.route(MODEL, route => {
@@ -989,7 +989,7 @@ test('a page element\'s own code reads the page, and the model is told when an e
   await messageBox(page).fill('Which keys?')
   await page.getByRole('button', { name: 'Send message', exact: true }).click()
   await expect(page.getByRole('button', { name: /Used connected tools/ })).toBeVisible()
-  // byokDemo.storedKeys() ran in the page.
+  // The page's storedKeys reader ran.
   await page.getByRole('button', { name: /Used connected tools/ }).click()
   await page.getByRole('button', { name: /Read from the page/ }).click()
   await expect(page.locator('.chat-tool-json')).toContainText('byok-ai:conversations:connection')
@@ -1118,8 +1118,8 @@ test('an element that declares its data twice is not offered, and the console sa
   page.on('console', message => { if (message.type() === 'warning') warnings.push(message.text()) })
   await seed(page, {})
   await page.goto('/')
-  // Step 1 has data-ai-context-data; this gives it a read expression too.
-  await page.evaluate(() => document.querySelectorAll('#how-it-works article')[0].setAttribute('data-ai-context-read', '1'))
+  // Step 1 has data-ai-context-data; this gives it a source too.
+  await page.evaluate(() => document.querySelectorAll('#how-it-works article')[0].setAttribute('data-ai-context-source', '{"reader":"storedKeys"}'))
   await step(page, 1).scrollIntoViewIfNeeded()
   await openChat(page)
   await page.getByRole('button', { name: 'Add from page', exact: true }).click()
@@ -1129,5 +1129,5 @@ test('an element that declares its data twice is not offered, and the console sa
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await expect(page.locator('[data-byok="page-picker-description"]')).toHaveText('How it works: the three steps of using byok-ai')
   await page.keyboard.press('Escape')
-  expect(warnings.filter(text => /sets both data-ai-context-data and data-ai-context-read/.test(text))).toHaveLength(1)
+  expect(warnings.filter(text => /sets data-ai-context-data and data-ai-context-source; an element has at most one of them/.test(text))).toHaveLength(1)
 })

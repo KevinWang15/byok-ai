@@ -6,7 +6,7 @@ import type { ImageStore, Workspace } from './conversation-files'
 import { isImageAttachment } from './images'
 import type { ScriptRunner } from './script-runner'
 import { WORKSPACE_ID, workspaceTools } from './workspace-tools'
-import { isPageElementAttachment, PAGE_CONTEXT_ID, pageContextTools, pageElementsIn, pageElementsNote, type PageElementRegistry } from './page-context'
+import { isPageElementAttachment, PAGE_CONTEXT_ID, pageContextTools, pageElementsIn, pageElementsNote, type PageElementRegistry, type PageReaders } from './page-context'
 
 /** Said in place of an image the model can't be given. */
 export const IMAGE_NOTES = {
@@ -84,6 +84,8 @@ export function createBrowserAdapter(options: {
   images?: ImageStore
   // The elements the user picked from the page: adds the page context tool, which reads them.
   pageElements?: PageElementRegistry
+  // The host's readers for page sources, read when a read starts, so it uses the latest.
+  pageReaders?: () => PageReaders
   systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number; onError: (message: string) => void
 }): ChatModelAdapter {
   return {
@@ -133,7 +135,8 @@ export function createBrowserAdapter(options: {
         }
         if (options.pageElements) {
           Object.assign(tools, pageContextTools({
-            registry: options.pageElements, elements: pageElementsIn(messages), tools: () => tools, isMcp: name => mcpTools.has(name), canSave: options.workspace !== undefined,
+            registry: options.pageElements, elements: pageElementsIn(messages), tools: () => tools, isMcp: name => mcpTools.has(name), readers: options.pageReaders,
+            canSave: options.workspace !== undefined,
           }))
         }
         const model = options.provider.createModel(options.values)

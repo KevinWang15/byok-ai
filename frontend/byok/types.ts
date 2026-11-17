@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react'
 import type { LanguageModel, ToolSet } from 'ai'
 import type { TextMessagePartComponent, ToolCallMessagePartComponent } from '@assistant-ui/react'
 import type { AnswerComponent } from './answer-components'
+import type { PageReaders } from './page-context'
 
 export type ProviderValues = Record<string, string>
 export interface ProviderFormProps {
@@ -55,12 +56,18 @@ export interface AskAIOptions {
   /**
    * Page context: lets the user add elements of the page to a message ("Add from page"), and the
    * model read their data with the `page__read_element` tool. Only elements the host describes
-   * with a `data-ai-context` attribute can be added; `data-ai-context-data` holds an element's data
-   * as text, or `data-ai-context-read` a JavaScript expression evaluated in the page (with
-   * `MCP(name, params)` and `element` in scope) when the model reads it (page-context.ts). The tools
-   * are named `page__…`, so no MCP server may use the id "page". Default false.
+   * with a `data-ai-context` attribute can be added. An element's data is in `data-ai-context-data`
+   * (text) or `data-ai-context-source` (JSON: calls of MCP tools and of `pageReaders`;
+   * pageContextAttributes builds it) (page-source.ts). The tools are named `page__…`, so no MCP
+   * server may use the id "page". Default false.
    */
   pageContext?: boolean
+  /**
+   * Functions a page element's data-ai-context-source can call by name (`{ "reader": name, "args": … }`),
+   * for what no MCP tool computes: data the page holds. Pass new ones as the page changes: each read
+   * uses the latest.
+   */
+  pageReaders?: PageReaders
   /**
    * Components the model may place in its answers, such as charts: it writes a
    * ```component:<name>``` fence with JSON props, and the default Markdown renders the host's

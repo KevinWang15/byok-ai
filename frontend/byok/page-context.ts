@@ -1,23 +1,27 @@
 import { jsonSchema, tool, type ToolExecutionOptions, type ToolSet } from 'ai'
 import type { CompleteAttachment, CreateAttachment, ThreadMessage } from '@assistant-ui/react'
 import { mcpValue } from './mcp-result'
+import { PAGE_CONTEXT_ATTRIBUTES, type McpCall, type PageReaders } from './page-source'
 import { SAVED_RESULT, WORKSPACE_ID, type SavableTool } from './workspace-tools'
+
+export { PAGE_CONTEXT_ATTRIBUTES, pageContextAttributes } from './page-source'
+export type { McpCall, McpSource, PageContextAttributes, PageReader, PageReaders, PageSource, ReaderSource } from './page-source'
 
 // Page context (the `pageContext` option): the user adds elements of the page to a message, and
 // the model reads their data when it needs it. The host decides what can be added by describing
-// it in the markup, with any framework or none:
+// it in the markup, with any framework or none (page-source.ts):
 //
-//   data-ai-context="<what the element is>"      required: makes it addable
-//   data-ai-context-data="<its data>"             optional: the data as text, for small data
-//   data-ai-context-read="<JavaScript expression>" optional: evaluated in the page when read
+//   data-ai-context="<what the element is>"           required: makes it addable
+//   data-ai-context-data="<its data>"                  optional: the data as text, for small data
+//   data-ai-context-source="<JSON: where its data is>" optional: read when the model asks
 //
 // An element has at most one of the last two (one with both can't be added, and the console says
 // why); with neither, its description is all there is. Elements nest: one inside another can be
 // added on its own, with it, or not at all, and reading one gives only its own data.
-// A read expression runs as page code, with `MCP(name, params)` (calls one of this answer's MCP
-// tools, returns a promise) and `element` in scope; its value, or what its promise resolves to,
-// is the data, as JSON. Promises inside the value's objects and arrays are awaited too, so a
-// panel can read as { totals: MCP(…), trend: MCP(…) }; one that fails becomes { error }.
+//
+// A source is data, never code: calls of this answer's MCP tools and of readers the host registers
+// in its code (the pageReaders option), in parts as the element shows them. Its calls start
+// together, and a part that fails becomes { error } in its place.
 //
 // A message holds what was added as attachments (type 'page-element'): an id, the description,
 // and the descriptions of the elements it is inside, nothing read. The model reads one with
@@ -25,16 +29,10 @@ import { SAVED_RESULT, WORKSPACE_ID, type SavableTool } from './workspace-tools'
 // themselves are known only while the page lives: an id names the element picked, while it is in
 // the document.
 
-export const PAGE_CONTEXT_ATTRIBUTES = {
-  description: 'data-ai-context',
-  data: 'data-ai-context-data',
-  read: 'data-ai-context-read',
-} as const
-
 export const PAGE_CONTEXT_LIMITS = {
   /** Page elements in one message. */
   perMessage: 8,
-  /** How long a read expression may take, MCP calls included. */
+  /** How long reading a source may take, its calls included. */
   readMs: 60_000,
   /** The most characters of data (as JSON) a read gives the model; more can be saved to the workspace. */
   resultChars: 20_000,
@@ -71,10 +69,10 @@ export function descriptionOf(element: Element): string | undefined {
   return element.getAttribute(PAGE_CONTEXT_ATTRIBUTES.description)?.trim() || undefined
 }
 /** Why the element can't be added (it declares its data twice), or undefined when it can. */
+const DECLARED = [PAGE_CONTEXT_ATTRIBUTES.data, PAGE_CONTEXT_ATTRIBUTES.source]
 export function declarationProblem(element: Element): string | undefined {
-  if (element.hasAttribute(PAGE_CONTEXT_ATTRIBUTES.data) && element.hasAttribute(PAGE_CONTEXT_ATTRIBUTES.read)) {
-    return `"${descriptionOf(element)}" sets both ${PAGE_CONTEXT_ATTRIBUTES.data} and ${PAGE_CONTEXT_ATTRIBUTES.read}; an element has at most one.`
-  }
+  const declared = DECLARED.filter(name => element.hasAttribute(name))
+  if (declared.length > 1) return `"${descriptionOf(element)}" sets ${declared.join(' and ')}; an element has at most one of them.`
 }
 // A mistake in the page is the developer's to see, once per element, not the user's.
 const warned = new WeakSet<Element>()
@@ -135,9 +133,6 @@ export function pageElementRegistry(): PageElementRegistry {
   }
 }
 
-/** How a read expression calls MCP tools: by full name (`serverId__toolName`), with an object of arguments. */
-export type McpCall = (name: string, params?: Record<string, unknown>) => Promise<unknown>
-
 /** The ids of the page elements added to these messages. */
 export function pageElementsIn(messages: readonly ThreadMessage[]): Set<string> {
   const ids = new Set<string>()
@@ -161,23 +156,30 @@ export function pageElementsNote(elements: readonly PageElementAttachment[], rea
 }
 
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
+const SOURCE = PAGE_CONTEXT_ATTRIBUTES.source
 
-// The page's code, compiled as the page runs it: global scope, strict, with MCP and element as its
-// only other names.
-type Read = (mcp: McpCall, element: Element) => unknown
-function compile(code: string): Read {
-  try {
-    return new Function('MCP', 'element', `"use strict";\nreturn (\n${code}\n)`) as Read
-  } catch (error) {
-    // A Content-Security-Policy without 'unsafe-eval' refuses any code compiled from text.
-    if (error instanceof EvalError) throw new Error(`This page's Content-Security-Policy doesn't allow ${PAGE_CONTEXT_ATTRIBUTES.read} (it needs 'unsafe-eval'), so only the element's description is known.`, { cause: error })
-    throw new Error(`The element's ${PAGE_CONTEXT_ATTRIBUTES.read} is not a JavaScript expression: ${errorText(error)}`, { cause: error })
+// A source with its calls started: a promise where each call is, every other value as it is. An
+// object is a call when its keys are mcp (a string) and maybe params, or reader and maybe args.
+const keysAre = (value: object, required: string, optional: string) => Object.keys(value).every(key => key === required || key === optional)
+function started(source: unknown, call: { mcp: McpCall; reader: (name: string, args: unknown) => unknown }): unknown {
+  if (Array.isArray(source)) return source.map(part => started(part, call))
+  if (typeof source !== 'object' || source === null) return source
+  const record = source as Record<string, unknown>
+  if (typeof record.mcp === 'string' && keysAre(record, 'mcp', 'params')) {
+    const { mcp: name, params = {} } = record
+    if (typeof params !== 'object' || params === null || Array.isArray(params)) throw new Error(`The params for ${name} are not an object.`)
+    return Promise.resolve().then(() => call.mcp(name, params as Record<string, unknown>))
   }
+  if (typeof record.reader === 'string' && keysAre(record, 'reader', 'args')) {
+    const { reader: name, args } = record
+    return Promise.resolve().then(() => call.reader(name, args))
+  }
+  return Object.fromEntries(Object.entries(record).map(([key, part]) => [key, started(part, call)]))
 }
 
 // The value with every promise in it awaited, in parallel: the value itself, and those in its plain
-// objects and arrays at any depth (a panel's read can be an object of MCP() calls, one per part).
-// A nested promise that rejects becomes { error } in its place, so one failed part leaves the rest.
+// objects and arrays at any depth. A nested promise that rejects becomes { error } in its place, so
+// one failed part leaves the rest.
 async function settled(value: unknown, depth = 0): Promise<unknown> {
   if (depth > 8) return value
   if (value instanceof Promise) return settled(await value, depth + 1)
@@ -194,43 +196,49 @@ async function settled(value: unknown, depth = 0): Promise<unknown> {
 
 // The value as JSON data. A string stays as it is.
 function asData(value: unknown): unknown {
-  if (value === undefined) throw new Error(`The element's ${PAGE_CONTEXT_ATTRIBUTES.read} returned nothing.`)
+  if (value === undefined) throw new Error(`The element's ${SOURCE} gave nothing.`)
   let json: string | undefined
-  try { json = JSON.stringify(value) } catch (error) { throw new Error(`The element's ${PAGE_CONTEXT_ATTRIBUTES.read} returned a value that is not JSON: ${errorText(error)}`, { cause: error }) }
-  if (json === undefined) throw new Error(`The element's ${PAGE_CONTEXT_ATTRIBUTES.read} returned a value that is not JSON.`)
+  try { json = JSON.stringify(value) } catch (error) { throw new Error(`The element's ${SOURCE} gave a value that is not JSON: ${errorText(error)}`, { cause: error }) }
+  if (json === undefined) throw new Error(`The element's ${SOURCE} gave a value that is not JSON.`)
   return JSON.parse(json)
 }
 
 /** Reads what the element declares: its description, and its data unless it has none. */
-export async function readPageElement(element: Element, options: { mcp: McpCall; signal?: AbortSignal; timeoutMs?: number }): Promise<{ description: string; data?: unknown }> {
+export async function readPageElement(element: Element, options: { mcp: McpCall; readers?: PageReaders; signal?: AbortSignal; timeoutMs?: number }): Promise<{ description: string; data?: unknown }> {
   const description = descriptionOf(element)
   if (description === undefined) throw new Error('The element no longer has a description.')
   const problem = declarationProblem(element)
   if (problem) throw new Error(problem)
   const data = element.getAttribute(PAGE_CONTEXT_ATTRIBUTES.data)
   if (data !== null) return { description, data }
-  const code = element.getAttribute(PAGE_CONTEXT_ATTRIBUTES.read)
-  if (code === null) return { description }
-  const read = compile(code)
-  // The expression can't be stopped, but the answer stops waiting for it.
+  const text = element.getAttribute(SOURCE)
+  if (text === null) return { description }
+  let source: unknown
+  try { source = JSON.parse(text) } catch (error) { throw new Error(`The element's ${SOURCE} is not JSON: ${errorText(error)}`, { cause: error }) }
+  const reader = (name: string, args: unknown) => {
+    const read = options.readers?.[name]
+    if (!read) throw new Error(`The page offers no reader named "${name}".`)
+    return read(args, { element, mcp: options.mcp, signal: options.signal })
+  }
+  // A call can't be stopped, but the answer stops waiting for it.
   const timeoutMs = options.timeoutMs ?? PAGE_CONTEXT_LIMITS.readMs
   const limits = AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(options.signal ? [options.signal] : [])])
   limits.throwIfAborted()
   const stopped = new Promise<never>((_, reject) => limits.addEventListener('abort', () => reject(options.signal?.aborted
-    ? options.signal.reason : new Error(`The element's ${PAGE_CONTEXT_ATTRIBUTES.read} took longer than ${timeoutMs / 1000} seconds.`)), { once: true }))
+    ? options.signal.reason : new Error(`The element's ${SOURCE} took longer than ${timeoutMs / 1000} seconds.`)), { once: true }))
   // Settled after the read finished, it is nobody's concern.
   stopped.catch(() => {})
   let value: unknown
   try {
-    value = await Promise.race([Promise.resolve().then(() => settled(read(options.mcp, element))), stopped])
+    value = await Promise.race([Promise.resolve().then(() => settled(started(source, { mcp: options.mcp, reader }))), stopped])
   } catch (error) {
     if (limits.aborted) throw error
-    throw new Error(`The element's ${PAGE_CONTEXT_ATTRIBUTES.read} failed: ${errorText(error)}`, { cause: error })
+    throw new Error(`The element's ${SOURCE} failed: ${errorText(error)}`, { cause: error })
   }
   return { description, data: asData(value) }
 }
 
-/** MCP() for read expressions: calls one of this answer's MCP tools and gives its result as a value. */
+/** MCP() for sources and readers: calls one of this answer's MCP tools and gives its result as a value. */
 export function mcpCall(options: { tools: () => ToolSet; isMcp: (name: string) => boolean; callOptions: ToolExecutionOptions<unknown> }): McpCall {
   return async (name, params = {}) => {
     if (typeof name !== 'string' || !options.isMcp(name)) {
@@ -260,9 +268,11 @@ export function pageContextTools(options: {
   registry: PageElementRegistry
   /** The ids of the elements added to this conversation's messages. */
   elements: ReadonlySet<string>
-  /** The other tools of this answer, which read expressions call through MCP(). */
+  /** The other tools of this answer, which sources and readers call through MCP(). */
   tools: () => ToolSet
   isMcp: (name: string) => boolean
+  /** The host's readers, as they are when a read starts. */
+  readers?: () => PageReaders
   /** Whether the workspace can save a read too large to give the model whole (it saves the whole read: SAVED_RESULT). */
   canSave: boolean
 }): ToolSet {
@@ -270,7 +280,7 @@ export function pageContextTools(options: {
     if (!options.elements.has(id)) throw new Error(`No element with the id ${id} was added to this conversation.`)
     const element = options.registry.picked(id)
     if (!element) throw new Error('This element is no longer on the page. The user can add it again.')
-    return readPageElement(element, { mcp: mcpCall({ ...options, callOptions }), signal: callOptions.abortSignal })
+    return readPageElement(element, { mcp: mcpCall({ ...options, callOptions }), readers: options.readers?.(), signal: callOptions.abortSignal })
   }
   const readElement: SavableTool = tool({
     description: 'Read an element the user added from the page to a message, by the id listed there: its description, and its data as the page has it now (none when the description is all there is). Reading an element gives only its own data, not that of elements inside it.',

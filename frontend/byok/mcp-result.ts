@@ -1,6 +1,6 @@
 // What an MCP tool call returned (a CallToolResult: `content`, maybe `structuredContent`, and
-// `isError`), for callers that pass it on: the workspace saves it to a file, and page elements'
-// read expressions get it from MCP().
+// `isError`), for callers that pass it on: the workspace saves it to a file, and page context's
+// sources and readers get it from MCP().
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 

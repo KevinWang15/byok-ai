@@ -65,6 +65,7 @@ assistant.unmount() // when the host removes it
 | `workspace` | `false` | Per-conversation files in the browser and sandboxed JavaScript over them (see Workspace). |
 | `images` | `false` | Lets the user attach images to messages, for providers that accept them (see Images). |
 | `pageContext` | `false` | Lets the user add elements of the page to a message, for the model to read (see Page context). |
+| `pageReaders` | `{}` | Functions page sources call by name, for data the page holds (see Page context). |
 | `answerComponents` | `[]` | Components the model may place in answers, such as charts (see Answer components). |
 | `componentInstructions` | `true` | Tells the model about `answerComponents`, after `systemPrompt`. |
 | `systemPrompt` | a short built-in prompt | System prompt for every answer. |
@@ -179,37 +180,40 @@ Elements can nest, and any of them can be added: the inner one, the outer one, o
 
 A click on the highlighted element or on the label's description, or Enter, adds the highlighted element. Escape or a right-click cancels. A message holds up to 8 (`PAGE_CONTEXT_LIMITS`). The composer shows "2 elements", which opens their list with remove buttons. Each one is marked on the page with a border, and a remove button at its top right, while the composer is visible.
 
-Only elements the host describes can be added. Any framework can write the attributes (`PAGE_CONTEXT_ATTRIBUTES`):
+Only elements the host describes can be added. Any framework can write the attributes (`PAGE_CONTEXT_ATTRIBUTES`), and `pageContextAttributes(description, source)` builds them:
 
 | Attribute | Holds |
 | --- | --- |
 | `data-ai-context` | Required. What the element is, for the user and the model: "Requests per hour, last 24 hours". |
 | `data-ai-context-data` | Optional. The element's data as text. Fine for small data; it sits in the DOM. |
-| `data-ai-context-read` | Optional. A JavaScript expression evaluated in the page when the model reads the element. Its value, or what its promise resolves to, is the data, as JSON. |
+| `data-ai-context-source` | Optional. Where the element's data is, as JSON (`PageSource`), read when the model reads the element. |
 
 An element has at most one of the last two. With neither, its description is all there is. An element with both can't be added: the picker passes over it, and the console says why, once. Reading an element gives only its own data, never that of the elements inside it.
 
-```tsx
-<section data-ai-context="Requests per hour, last 24 hours" data-ai-context-read="window.dashboard.series('requests')">…</section>
-<table data-ai-context={`Top keys by spend, ${range}`} data-ai-context-read={`MCP("stats__top_keys", { range: ${JSON.stringify(range)} })`}>…</table>
-<span data-ai-context="Selected team" data-ai-context-data={team.name}>{team.name}</span>
-```
+A source is data, never code. It is one of:
 
-A read expression runs as page code, in the global scope and in strict mode, with two more names in scope:
+- `{ "mcp": "serverId__toolName", "params": { … } }`: a call of one of the answer's MCP tools, through the same connection and headers as the model's calls. It gives the tool's structured content, or its text when it has none (read as JSON when the text is JSON, as tools often return it), and fails when the tool reports an error.
+- `{ "reader": "name", "args": … }`: a call of one of the host's `pageReaders`, for data the page holds that no tool computes.
+- An object or array of sources: a panel's parts, at any depth. Every other JSON value is kept as it is.
 
-- `MCP(name, params)` calls one of the answer's MCP tools by its full name (`serverId__toolName`) with an object of arguments, through the same connection and headers as the model's calls. It returns a promise of the tool's structured content, or of its text when it has none (read as JSON when the text is JSON, as tools often return it), and rejects when the tool reports an error.
-- `element` is the element being read.
-
-The value may be an object or array with promises in it, at any depth, and each is awaited, in parallel. A panel can then read as several calls at once, one per part it shows. A nested promise that fails becomes `{ "error": "…" }` in its place, so the other parts still arrive:
+An object is a call when its keys are `mcp` (a string) and maybe `params`, or `reader` (a string) and maybe `args`; any other object holds parts. All of a source's calls start together. A part that fails becomes `{ "error": "…" }` in its place, so the other parts still arrive. A source that is one call fails as a whole. A read may take 60 seconds, its calls included, and Stop stops the answer from waiting for it.
 
 ```tsx
-<section data-ai-context="Overview: every card" data-ai-context-read={`({
-  totals: MCP("stats__overview", ${JSON.stringify(params)}),
-  byModel: MCP("stats__breakdown", ${JSON.stringify({ ...params, dimension: 'model' })}),
-})`}>…</section>
+import { pageContextAttributes } from '@kevinwang15/byok-ai'
+
+<section {...pageContextAttributes(`Overview, ${rangeName}`, {
+  totals: { mcp: 'stats__overview', params },
+  byModel: { mcp: 'stats__breakdown', params: { ...params, dimension: 'model' } },
+  selection: { reader: 'selectedRows', args: { table: 'models' } },
+})}>…</section>
+<span {...pageContextAttributes('Selected team')} data-ai-context-data={team.name}>{team.name}</span>
 ```
 
-Build expressions from your own values as JSON (`JSON.stringify` gives a JavaScript literal), never by pasting text from the page into code. A read may take 60 seconds, MCP calls included, and Stop stops the answer from waiting for it.
+A reader is a function in your code, passed as `pageReaders`: `(args, { element, mcp, signal }) => value`. It gets the source's `args`, the element being read, `mcp(name, params)` for tool calls of its own, and the answer's abort signal, and may return a promise. Each read uses the latest `pageReaders` given. A source naming a reader the page doesn't offer says so.
+
+```tsx
+<AskAI pageContext pageReaders={{ selectedRows: ({ table }) => selection.rows(table) }} />
+```
 
 The message tells the model which elements were added. For each one it gives the id, the description, and the descriptions of the described elements it is inside, recorded when it was picked:
 
@@ -355,7 +359,7 @@ Assistants that pass the same `connectionKey` share one connection: connecting o
 - Browsers can't launch stdio MCP servers; expose them over Streamable HTTP.
 - Authenticating users and authorizing tool calls is the MCP server's job. Supply credentials through `headers`.
 - Tools run as soon as the model calls them; there is no approval step. Don't expose tools with effects the user hasn't agreed to.
-- `data-ai-context-read` is page code: it runs with the page's privileges when the model reads an element the user added, and a Content-Security-Policy must allow `'unsafe-eval'` for it. Under a policy without it, the model is told that only the element's description is known. Only your own markup may carry it. HTML from other people (comments, rendered documents) must not: sanitizers such as DOMPurify keep `data-*` attributes by default, so remove `data-ai-context*` from it. The model can read only elements the user added, and can't pass anything to their expressions.
+- A page source names tools and readers, and never runs code from the page: it needs nothing from a Content-Security-Policy. Still, markup from other people (comments, rendered documents) must not carry `data-ai-context*` attributes, because a source in it could call your tools with the reader's access when the user adds it. Sanitizers such as DOMPurify keep `data-*` attributes by default, so remove these. The model can read only elements the user added, and can't change their sources.
 - Treat answers as untrusted: tool results can carry other people's text. Images in answers aren't loaded (see Custom UI); links need a click. A custom `img` component, or rendering answers as HTML, undoes that.
 - Use one `AskAI` or `mountAskAI` per `storageKey`: two mounted with the same key overwrite each other's conversations.
 - Apps on one origin (paths of a shared host) share localStorage and OPFS. Give each app's `storageKey`, `connectionKey` and `usePanelLayout` key the app's own prefix (`my-app:assistant`); the library stores nothing under any other name. The browser does not keep such apps apart from each other's scripts.

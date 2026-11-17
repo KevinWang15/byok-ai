@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MessagePrimitive, ThreadPrimitive } from '@assistant-ui/react'
-import { AskAIProvider, MarkdownText, useAskAI } from './byok'
+import { AskAIProvider, MarkdownText, pageContextAttributes, useAskAI } from './byok'
 
 import { DEMO_COMPONENTS } from './demo/components'
 import { DemoAssistant } from './demo/DemoAssistant'
@@ -8,10 +8,9 @@ import { DemoIcon } from './demo/DemoIcon'
 
 const servers = [{ id: 'docs', name: 'Docs and time', url: '/api/mcp' }]
 
-// What step 3 of "How it works" reads when the model asks (data-ai-context-read): which
-// localStorage keys this page keeps, without their values.
-declare global { interface Window { byokDemo: { storedKeys: () => string[] } } }
-window.byokDemo = { storedKeys: () => Object.keys(localStorage).filter(key => key.startsWith('byok-ai:')).sort() }
+// The page's readers, for what no MCP tool knows. Step 3 of "How it works" reads this one when the
+// model asks: which localStorage keys this page keeps, without their values.
+const pageReaders = { storedKeys: () => Object.keys(localStorage).filter(key => key.startsWith('byok-ai:')).sort() }
 
 function HeadlessExample() {
   const { connection, providers, connect, disconnect, runtime, busy, error } = useAskAI()
@@ -129,12 +128,12 @@ export function YourPage() {
       </section>
       {/* Page context: the section and each step in it can be added to a message, alone or together.
           The section has only its description. Of the steps, the first carries its data in the
-          markup, the second reads the docs through the demo's MCP server, and the third calls a
-          function of the page, when the model reads them. */}
+          markup; the second's source is a call of the demo's MCP server, and the third's a reader of
+          the page's: both run when the model reads them. */}
       <section id="how-it-works" className="demo-features" aria-label="How it works" data-ai-context="How it works: the three steps of using byok-ai">
         <article data-ai-context="How it works, step 1: choose a provider" data-ai-context-data="Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials."><span className="demo-feature-number">01</span><div><h2>Choose a provider.</h2><p>Connect OpenAI, Anthropic, Gemini, or a compatible endpoint using your own credentials.</p></div></article>
-        <article data-ai-context="How it works, step 2: connect MCP tools. Its data is what the docs say about MCP." data-ai-context-read={'MCP("docs__search_docs", { query: "MCP" }).then(text => JSON.parse(text))'}><span className="demo-feature-number">02</span><div><h2>Connect MCP tools.</h2><p>The browser-side agent discovers and calls tools exposed by your backend.</p></div></article>
-        <article data-ai-context="How it works, step 3: resume saved conversations" data-ai-context-read="byokDemo.storedKeys()"><span className="demo-feature-number">03</span><div><h2>Resume saved conversations.</h2><p>Provider settings, API keys, conversation history, and drafts are stored in localStorage.</p></div></article>
+        <article {...pageContextAttributes('How it works, step 2: connect MCP tools. Its data is what the docs say about MCP.', { mcp: 'docs__search_docs', params: { query: 'MCP' } })}><span className="demo-feature-number">02</span><div><h2>Connect MCP tools.</h2><p>The browser-side agent discovers and calls tools exposed by your backend.</p></div></article>
+        <article {...pageContextAttributes('How it works, step 3: resume saved conversations', { reader: 'storedKeys' })}><span className="demo-feature-number">03</span><div><h2>Resume saved conversations.</h2><p>Provider settings, API keys, conversation history, and drafts are stored in localStorage.</p></div></article>
       </section>
       <section className="demo-integration" id="integration">
         <div><span className="demo-eyebrow">UNSTYLED CORE · COMPOSABLE UI</span><h2>Style and compose<br />the chat interface.</h2><p>Reuse provider setup, chat, history, and tool rendering, or supply your own components. The core ships without CSS.</p><a href="#sandbox">Try the headless example <DemoIcon name="arrow" /></a></div>
@@ -148,5 +147,5 @@ export function YourPage() {
   </div>
 }
 export default function App() {
-  return <AskAIProvider mcpServers={servers} workspace images pageContext answerComponents={DEMO_COMPONENTS}><DemoContent /></AskAIProvider>
+  return <AskAIProvider mcpServers={servers} workspace images pageContext pageReaders={pageReaders} answerComponents={DEMO_COMPONENTS}><DemoContent /></AskAIProvider>
 }
