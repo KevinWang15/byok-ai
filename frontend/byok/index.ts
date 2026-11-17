@@ -14,7 +14,7 @@ export type { AskAIOptions, AskAIProps, AskAIChatProps, AskAIProviderProps, Prov
 export type { Conversation } from './storage'
 export { WORKSPACE_LIMITS, browserFilesAvailable } from './conversation-files'
 export type { Workspace, WorkspaceFile } from './conversation-files'
-export { SCRIPT_LIMITS } from './sandbox'
+export { SCRIPT_LIMITS } from './script'
 export { IMAGE_LIMITS } from './images'
 export { mountAskAI } from './mount'
 export { Markdown, MarkdownText } from './Markdown'

@@ -1,5 +1,6 @@
 import { newQuickJSWASMModuleFromVariant, shouldInterruptAfterDeadline, type QuickJSContext, type QuickJSHandle, type QuickJSSyncVariant } from 'quickjs-emscripten-core'
 import { fileNameProblem, writeProblem, type WorkspaceFile } from './conversation-files'
+import { SCRIPT_LIMITS, type ScriptRequest, type ScriptResult } from './script'
 
 // Runs a script the model wrote over a snapshot of a conversation's files, in QuickJS: a separate
 // JavaScript engine compiled to WebAssembly, which sees only what is handed to it here. There is no
@@ -7,22 +8,6 @@ import { fileNameProblem, writeProblem, type WorkspaceFile } from './conversatio
 // saved by the caller only if the script finished, so a failed script changes nothing.
 // Pure: the engine is passed in, so tests run it in Node; the browser runs it in a worker
 // (sandbox-worker.ts), which a timeout can stop outright.
-
-export const SCRIPT_LIMITS = {
-  /** Wall-clock time the engine allows a script. */
-  timeMs: 10_000,
-  /** The engine's heap. */
-  memoryBytes: 256 * 1024 * 1024,
-  stackBytes: 1024 * 1024,
-  /** Characters of the returned value (as JSON), and of the console output. */
-  resultChars: 20_000,
-  logChars: 20_000,
-}
-
-export interface ScriptRequest { code: string; files: Record<string, string> }
-export type ScriptResult =
-  | { ok: true; result: unknown; logs: string; logsTruncated: boolean; written: Record<string, string>; deleted: string[] }
-  | { ok: false; error: string; logs: string; logsTruncated: boolean }
 
 // What the script sees: files and console, over host functions it can't reach directly.
 const PRELUDE = `"use strict";

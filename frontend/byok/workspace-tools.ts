@@ -1,7 +1,7 @@
 import { jsonSchema, tool, type ToolExecutionOptions, type ToolSet } from 'ai'
 import type { Workspace } from './conversation-files'
 import { mcpError, mcpText } from './mcp-result'
-import { SCRIPT_LIMITS } from './sandbox'
+import { SCRIPT_LIMITS } from './script'
 import type { ScriptRunner } from './script-runner'
 
 // The workspace tools: the assistant keeps files beside the conversation and runs JavaScript over

