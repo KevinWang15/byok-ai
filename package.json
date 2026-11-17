@@ -31,20 +31,21 @@
     },
     "./agent": {
       "types": "./dist/lib/entries/agent.d.ts",
-      "import": "./dist/lib/agent.js"
+      "import": "./dist/lib/entries/agent.js"
     },
     "./connection": {
       "types": "./dist/lib/entries/connection.d.ts",
-      "import": "./dist/lib/connection.js"
+      "import": "./dist/lib/entries/connection.js"
     },
     "./script-engine": {
       "types": "./dist/lib/entries/script-engine.d.ts",
-      "import": "./dist/lib/script-engine.js"
+      "import": "./dist/lib/entries/script-engine.js"
     }
   },
   "files": [
     "dist/lib"
   ],
+  "sideEffects": false,
   "scripts": {
     "dev": "concurrently --kill-others --names api,web \"npm:dev:server\" \"npm:dev:client\"",
     "dev:client": "vite",
