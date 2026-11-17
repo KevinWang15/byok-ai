@@ -1,4 +1,4 @@
-import { addableChain, addableElements, descriptionOf } from './page-context'
+import { addableChain, addableElements, descriptionOf, setShown } from './page-context'
 
 // Choosing an element of the page to add to a message, as a browser's element inspector does.
 // The innermost element under the pointer that can be added is highlighted, with its description
@@ -23,7 +23,7 @@ export function pickerHint(count: number, nested: boolean): string {
 }
 
 const placeBox = (node: HTMLElement, rect: DOMRect | undefined) => {
-  node.hidden = !rect
+  setShown(node, rect !== undefined)
   if (rect) Object.assign(node.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px', height: rect.height + 'px' })
 }
 // The element's box, when it has one on the screen.
@@ -55,6 +55,9 @@ export function pickPageElement(options: { signal?: AbortSignal } = {}): Promise
     hint.setAttribute('role', 'status')
     const addable = addableElements()
     hint.textContent = pickerHint(addable.length, addable.some(element => addableChain(element).length > 1))
+    // Shown once there is an element under them.
+    setShown(highlight, false)
+    setShown(label, false)
     root.append(highlight, label, hint)
 
     // The innermost element chosen (by the pointer or Tab), the addable elements it is inside and
@@ -96,7 +99,7 @@ export function pickPageElement(options: { signal?: AbortSignal } = {}): Promise
     const renderLabel = () => {
       description.textContent = current() ? descriptionOf(current()) ?? '' : ''
       for (const [button, element, name] of [[outer, chain[levelIndex - 1], 'Outer'], [inner, chain[levelIndex + 1], 'Inner']] as const) {
-        button.hidden = !element
+        setShown(button, element !== undefined)
         const text = element ? `${name}: ${descriptionOf(element)}` : ''
         button.title = text
         button.setAttribute('aria-label', text)
@@ -106,8 +109,9 @@ export function pickPageElement(options: { signal?: AbortSignal } = {}): Promise
       placeBox(highlight, boxOf(current()))
       // The label stays with the innermost element, so that its buttons stay put while one is chosen.
       const anchor = boxOf(target)
-      label.hidden = !anchor || !boxOf(current())
-      if (!anchor || label.hidden) return
+      const labelled = anchor !== undefined && boxOf(current()) !== undefined
+      setShown(label, labelled)
+      if (!labelled) return
       // Right above the element when there is room, else right below it, and inside the viewport.
       // With no gap, the pointer goes from the element into the label without crossing the
       // element around it, which would choose that one instead.

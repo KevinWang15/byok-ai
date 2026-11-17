@@ -1304,3 +1304,23 @@ test('while an answer is written, its versions can be shown and edits wait to be
   await expect.poll(() => shown(page)).toEqual(['Q1', 'Answer 2. (2 / 2)'])
   expect(errors).toEqual([])
 })
+
+test('the picker shows no label until an element is under it, whatever display the host gives the label', async ({ page }) => {
+  await seed(page, {})
+  await page.goto('/')
+  // Hosts style the label as a row: that must not show it while it labels nothing.
+  await page.addStyleTag({ content: '[data-byok="page-picker-label"], [data-byok="page-picker-outer"], [data-byok="page-picker-inner"] { display: flex; }' })
+  await openChat(page)
+  await page.mouse.move(2, 2)
+  await page.getByRole('button', { name: 'Add from page', exact: true }).click()
+  await expect(page.locator('[data-byok="page-picker"]')).toBeVisible()
+  await page.waitForTimeout(200)
+  await expect(page.locator('[data-byok="page-picker-label"]')).toBeHidden()
+  await expect(page.locator('[data-byok="page-picker-highlight"]')).toBeHidden()
+  // On an element: the label, with no ↑ for the outermost one.
+  await page.keyboard.press('Tab')
+  await expect(page.locator('[data-byok="page-picker-label"]')).toBeVisible()
+  await expect(page.locator('[data-byok="page-picker-description"]')).toHaveText(/How it works/)
+  await expect(page.locator('[data-byok="page-picker-outer"]')).toBeHidden()
+  await page.keyboard.press('Escape')
+})

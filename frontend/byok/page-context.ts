@@ -62,6 +62,15 @@ export const insideOf = (attachment: PageElementAttachment): readonly string[] =
 const newElementId = () => Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
 /** "2 elements": the default summary of a message's page elements. */
 export const elementCount = (count: number) => count === 1 ? '1 element' : `${count} elements`
+/**
+ * Shows or hides a part drawn on the page (the picker's, a mark). `hidden` alone loses to a host's
+ * `display` on the part (a flex label, say), so it is also hidden inline, which no stylesheet
+ * overrides; shown, the host's display applies again.
+ */
+export function setShown(node: HTMLElement, shown: boolean) {
+  node.hidden = !shown
+  node.style.display = shown ? '' : 'none'
+}
 export const isPageElementId = (id: string) => /^[a-f0-9]{32}$/.test(id)
 
 /** The element's description, or undefined when it has none. */

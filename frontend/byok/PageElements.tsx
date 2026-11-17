@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useAui, useAuiState, type Attachment } from '@assistant-ui/react'
 import { Button, Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react'
 import { useAskAI } from './context'
-import { elementCount, insideOf, isPageElementAttachment, type PageElementAttachment } from './page-context'
+import { elementCount, insideOf, isPageElementAttachment, setShown, type PageElementAttachment } from './page-context'
 
 // The page context's parts (the `pageContext` option): the button that starts choosing, the
 // elements a message holds, and the marks on the page around the composer's. Unstyled, like the
@@ -89,7 +89,7 @@ function PageMarks({ elements, anchor, remove }: {
         if (!mark) return
         const rect = shown ? target?.getBoundingClientRect() : undefined
         const visible = rect !== undefined && rect.width > 0 && rect.height > 0
-        mark.hidden = !visible
+        setShown(mark, visible)
         if (!visible) return
         Object.assign(mark.style, { left: rect.left + 'px', top: rect.top + 'px', width: rect.width + 'px', height: rect.height + 'px' })
         const outer = onPage.filter(other => other && other !== target && other.contains(target!))
