@@ -295,7 +295,7 @@ A conversation is a tree, as in ChatGPT. Regenerating an answer adds another ver
 
 `AskAIProvider` holds state and the assistant-ui runtime and renders no DOM. Inside it, `useAskAI()` returns `title`, `providers`, `mcpServers`, `clientTools` (names), `workspace` (the open conversation's files, when on), `images` (whether images can be attached now), `loadImage(id)`, `open`/`setOpen`, `page`/`setPage` (`'chat' | 'settings' | 'history' | 'tools'`), `connection`, `connect(provider, values)` (returns an error string or `undefined`), `disconnect()`, `conversations`, `activeConversation`, `newConversation()`, `selectConversation(id)`, `deleteConversation(id)` (immediate; confirm first), `busy`, `error`, `storageError` and `runtime`. Send with `runtime.thread.append(text)` and stop with `runtime.thread.cancelRun()`. Changing provider, page or conversation is ignored while `busy`.
 
-Compose the parts you need: `AskAITrigger` and `AskAIPanel` (native button and div props), `AskAISetup`, `AskAIChat`, `AskAIHistory`, `AskAITools`, `AskAIMessageContent`, `AskAIMessageActions`, `AskAIBranchPicker` (a message's versions: previous and next around "2 / 5", nothing for one version; `previous` and `next` replace the buttons' contents), `AskAIEditComposer` (a user message being edited), or `AskAIWidget` for the full default UI. For page context: `AskAIAddFromPage` (renders nothing while `pageContext` is off), `AskAIComposerElements` (the composer's elements and their marks on the page) and `AskAIMessageElements` (a user message's), each taking `summary(count)` for the "2 elements" text; `useAskAI()` also gives `pageContext`, `picking` and `pickFromPage()`. For images in a custom composer or message: `AskAIAddImage` (the attach button; renders nothing while images can't be attached), `AskAIComposerImages` (attached images with remove buttons), `AskAIMessageImages` (a user message's images), and `useAskAIImage()` for your own thumbnail; wrap the composer's input in `ComposerPrimitive.AttachmentDropzone` for dropping. `createBrowserAdapter` is the assistant-ui `ChatModelAdapter` behind the runtime, for hosts that build their own; it uses `systemPrompt` as given, so add `answerComponentInstructions(components)` to it yourself.
+Compose the parts you need: `AskAITrigger` and `AskAIPanel` (native button and div props), `AskAISetup`, `AskAIChat` (or its parts, `AskAIThread`, `AskAIMessages`, `AskAIComposer` and `AskAIError`; see Layouts), `AskAIHistory`, `AskAITools`, `AskAIMessageContent`, `AskAIMessageActions`, `AskAIBranchPicker` (a message's versions: previous and next around "2 / 5", nothing for one version; `previous` and `next` replace the buttons' contents), `AskAIEditComposer` (a user message being edited), or `AskAIWidget` for the full default UI. For page context: `AskAIAddFromPage` (renders nothing while `pageContext` is off), `AskAIComposerElements` (the composer's elements and their marks on the page) and `AskAIMessageElements` (a user message's), each taking `summary(count)` for the "2 elements" text; `useAskAI()` also gives `pageContext`, `picking` and `pickFromPage()`. For images in a custom composer or message: `AskAIAddImage` (the attach button; renders nothing while images can't be attached), `AskAIComposerImages` (attached images with remove buttons), `AskAIMessageImages` (a user message's images), and `useAskAIImage()` for your own thumbnail; wrap the composer's input in `ComposerPrimitive.AttachmentDropzone` for dropping. `createBrowserAdapter` is the assistant-ui `ChatModelAdapter` behind the runtime, for hosts that build their own; it uses `systemPrompt` as given, so add `answerComponentInstructions(components)` to it yourself.
 
 ```tsx
 import { AskAIChat, AskAIHistory, AskAIPanel, AskAIProvider, AskAISetup, AskAITrigger, useAskAI } from '@kevinwang15/byok-ai'
@@ -312,6 +312,37 @@ function Shell() {
 }
 
 export const Page = () => <AskAIProvider storageKey="my-app:help"><Shell /></AskAIProvider>
+```
+
+### Layouts
+
+`AskAIChat` is the chat in one fixed order: messages, then the error, then the message box. To lay it out yourself, compose its parts inside `AskAIThread` in any order, with any markup around them, in a dialog or not:
+
+| Part | Is |
+| --- | --- |
+| `AskAIThread` | The chat's frame (assistant-ui's thread root). Takes `components`, like `AskAIChat`, and native div props. |
+| `AskAIMessages` | The messages, or the thread's `Empty` component while there are none. Native div props go to the scrolling viewport. |
+| `AskAIComposer` | The default message box: attached images and page elements, the input, attach and add-from-page buttons, Send or Stop. Use your own `ComposerPrimitive.Root` instead if you like. |
+| `AskAIError` | Why the last answer stopped or failed (`useAskAI().error`), as an alert; nothing while there is none. |
+
+A search-style box on a page, with suggested questions and the answers below it, needs no dialog or trigger: `open` only concerns `AskAIPanel`.
+
+```tsx
+import { AskAIComposer, AskAIError, AskAIMessages, AskAIProvider, AskAIThread, useAskAI } from '@kevinwang15/byok-ai'
+
+function InlineAsk() {
+  const { runtime, connection, busy } = useAskAI()
+  return <AskAIThread className="ask-inline">
+    <AskAIComposer />
+    <button type="button" disabled={!connection || busy} onClick={() => runtime.thread.append('Is there a meeting tool?')}>
+      Is there a meeting tool?
+    </button>
+    <AskAIError />
+    <AskAIMessages />
+  </AskAIThread>
+}
+
+export const Page = () => <AskAIProvider storageKey="my-app:inline-ask"><InlineAsk /></AskAIProvider>
 ```
 
 `components` on `AskAIChat`, `AskAIWidget` and `AskAI` replaces parts of the chat: `Text`, `ToolFallback`, `UserMessage`, `AssistantMessage`, `EditComposer` (a user message while it is edited; default `AskAIEditComposer`), `Empty` and `Composer`. Message slots render inside assistant-ui's message scope; use `AskAIMessageContent` in them to keep the `Text` and `ToolFallback` overrides, `AskAIMessageActions` for copy and regenerate on answers and edit on your messages (labels via `copy`, `copied`, `regenerate`, `edit`), and `AskAIBranchPicker` for versions. An `EditComposer` is a `ComposerPrimitive.Root` with an input, `ComposerPrimitive.Cancel` and `ComposerPrimitive.Send`; `AskAIComposerImages` and `AskAIComposerElements` in it show the edited message's. Define slot components at module scope so they don't remount while streaming.

@@ -1324,3 +1324,25 @@ test('the picker shows no label until an element is under it, whatever display t
   await expect(page.locator('[data-byok="page-picker-outer"]')).toBeHidden()
   await page.keyboard.press('Escape')
 })
+
+test('the chat parts compose into an inline layout: the box above, a suggestion sent, the answer below', async ({ page }) => {
+  await seed(page, {})
+  await page.route(MODEL, route => route.fulfill(answer('Every OpenAI-compatible endpoint works.')))
+  await page.goto('/')
+  const inline = page.getByRole('region', { name: 'Inline layout example' })
+  const thread = inline.locator('[data-byok="chat"]')
+  // The composer comes first in this layout, then the suggestions, then the messages.
+  const order = await thread.evaluate(root => [...root.children].map(child => child.getAttribute('data-byok') ?? child.className))
+  expect(order).toEqual(['composer', 'demo-inline-suggestions', 'messages'])
+  await inline.getByRole('button', { name: 'Which providers can I use?' }).click()
+  const messages = thread.locator('[data-byok="messages"]')
+  await expect(messages.locator('[data-byok="message"][data-role="user"]')).toHaveText(/Which providers can I use\?/)
+  await expect(messages.locator('[data-byok="message"][data-role="assistant"]')).toContainText('Every OpenAI-compatible endpoint works.')
+  // Typing in its own box continues the same conversation, and the dialog's chat is untouched.
+  await inline.getByRole('textbox', { name: 'Message', exact: true }).fill('And Anthropic?')
+  await inline.getByRole('textbox', { name: 'Message', exact: true }).press('Enter')
+  await expect(messages.locator('[data-byok="message"][data-role="user"]')).toHaveCount(2)
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('byok-ai:inline-demo') ?? '{}'))
+  expect(saved.conversations).toHaveLength(1)
+  expect(await page.evaluate(() => localStorage.getItem('byok-ai:conversations'))).toBeNull()
+})

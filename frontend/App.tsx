@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { MessagePrimitive, ThreadPrimitive } from '@assistant-ui/react'
-import { AskAIProvider, MarkdownText, pageContextAttributes, pageContextData, useAskAI } from './byok'
+import { AskAIComposer, AskAIError, AskAIMessages, AskAIProvider, AskAIThread, MarkdownText, pageContextAttributes, pageContextData, useAskAI } from './byok'
 
 import { DEMO_COMPONENTS } from './demo/components'
 import { DemoAssistant } from './demo/DemoAssistant'
@@ -88,6 +88,28 @@ function HeadlessMessages() {
   </ThreadPrimitive.Root>
 }
 
+// The chat's parts in a layout of the page's own, inline rather than in a dialog: the message box
+// on top, under suggested questions, and the answers below it.
+const SUGGESTIONS = ['Which providers can I use?', 'What time is it?']
+function InlineAsk() {
+  const { connection, runtime, busy } = useAskAI()
+  return <AskAIThread className="demo-inline" aria-label="Inline example">
+    <AskAIComposer />
+    <p className="demo-inline-suggestions">Try: {SUGGESTIONS.map(question => (
+      <button key={question} type="button" disabled={!connection || busy} onClick={() => runtime.thread.append(question)}>{question}</button>
+    ))}</p>
+    <AskAIError />
+    <AskAIMessages />
+  </AskAIThread>
+}
+function InlineExample() {
+  return <section className="demo-sandbox" aria-label="Inline layout example">
+    <span className="demo-eyebrow">INLINE LAYOUT</span><h2>Put the chat in the page.</h2>
+    <p>The same parts as the dialog's chat, arranged by the page: a search-style box first, answers below. It shares the dialog's connection and keeps its own conversations.</p>
+    <AskAIProvider mcpServers={servers} storageKey="byok-ai:inline-demo" connectionKey="byok-ai:conversations:connection"><InlineAsk /></AskAIProvider>
+  </section>
+}
+
 function DemoContent() {
   const { setOpen, connection } = useAskAI()
   const [copied, setCopied] = useState(false)
@@ -141,6 +163,7 @@ export function YourPage() {
       </section>
       <AskAIProvider mcpServers={servers} storageKey="byok-ai:headless-demo"><HeadlessExample /></AskAIProvider>
       <SharedConnectionExample />
+      <InlineExample />
     </main>
     <footer className="demo-footer"><a className="demo-logo" href="#"><DemoIcon name="sparkle" size={16} /> byok / ai</a><span>React component library</span><span>Browser-side agent · MCP backend</span></footer>
     <DemoAssistant />

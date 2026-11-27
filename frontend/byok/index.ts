@@ -1,5 +1,5 @@
 export {
-  AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIMessageContent, AskAIMessageActions, AskAIBranchPicker, AskAIEditComposer, AskAIHistory, AskAITools,
+  AskAI, AskAIWidget, AskAITrigger, AskAIPanel, AskAISetup, AskAIChat, AskAIThread, AskAIMessages, AskAIError, AskAIComposer, AskAIMessageContent, AskAIMessageActions, AskAIBranchPicker, AskAIEditComposer, AskAIHistory, AskAITools,
   AskAIComposerImages, AskAIMessageImages, AskAIAddImage, AskAIAddFromPage, AskAIComposerElements, AskAIMessageElements,
 } from './AskAI'
 export { useAskAIImage } from './useAskAIImage'

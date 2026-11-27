@@ -124,7 +124,12 @@ export function AskAIEditComposer() {
   </ComposerPrimitive.Root>
 }
 function DefaultEmpty() { return <p>Start a conversation.</p> }
-function DefaultComposer() {
+/**
+ * The default message box: images and page elements being added, the input, attach and
+ * add-from-page buttons, and Send, or Stop while a response runs. Use inside `AskAIThread`, before
+ * or after `AskAIMessages`, or replace it with your own `ComposerPrimitive.Root`.
+ */
+export function AskAIComposer() {
   const { connection, images } = useAskAI()
   return <ComposerPrimitive.Root data-byok="composer">
     <ComposerPrimitive.AttachmentDropzone data-byok="composer-dropzone" disabled={!images}>
@@ -138,23 +143,51 @@ function DefaultComposer() {
     <ThreadPrimitive.If running><ComposerPrimitive.Cancel>Stop response</ComposerPrimitive.Cancel></ThreadPrimitive.If>
   </ComposerPrimitive.Root>
 }
-/** Unstyled chat orchestration with replaceable message, empty-state, and composer layouts. */
-export function AskAIChat({ components }: AskAIChatProps = {}) {
-  const { error } = useAskAI()
+/**
+ * The chat's frame, for laying out its parts yourself: put `AskAIMessages`, `AskAIError` and a
+ * composer (`AskAIComposer` or your own) inside, in any order and with any markup around them. A
+ * search box above its answers, say, or messages in one column and the composer in another.
+ * `components` replaces message layouts and their text and tool rendering, as on `AskAIChat`.
+ * Native div props go to the root.
+ */
+export function AskAIThread({ components, children, ...props }: AskAIChatProps & ComponentPropsWithoutRef<typeof ThreadPrimitive.Root>) {
+  return <MessageRenderingContext.Provider value={components}>
+    <ThreadPrimitive.Root data-byok="chat" {...props}>{children}</ThreadPrimitive.Root>
+  </MessageRenderingContext.Provider>
+}
+/**
+ * The conversation's messages, or the enclosing thread's `Empty` component while there are none.
+ * Use inside `AskAIThread`; native div props go to the scrolling viewport.
+ */
+export function AskAIMessages(props: ComponentPropsWithoutRef<typeof ThreadPrimitive.Viewport>) {
+  const components = useContext(MessageRenderingContext)
   const Empty = components?.Empty ?? DefaultEmpty
-  const Composer = components?.Composer ?? DefaultComposer
-  return <MessageRenderingContext.Provider value={components}><ThreadPrimitive.Root data-byok="chat">
-    <ThreadPrimitive.Viewport data-byok="messages">
-      <ThreadPrimitive.Empty><Empty /></ThreadPrimitive.Empty>
-      <ThreadPrimitive.Messages components={{
-        UserMessage: components?.UserMessage ?? Message,
-        AssistantMessage: components?.AssistantMessage ?? Message,
-        UserEditComposer: components?.EditComposer ?? AskAIEditComposer,
-      }} />
-    </ThreadPrimitive.Viewport>
-    {error && <p role="alert">{error}</p>}
+  return <ThreadPrimitive.Viewport data-byok="messages" {...props}>
+    <ThreadPrimitive.Empty><Empty /></ThreadPrimitive.Empty>
+    <ThreadPrimitive.Messages components={{
+      UserMessage: components?.UserMessage ?? Message,
+      AssistantMessage: components?.AssistantMessage ?? Message,
+      UserEditComposer: components?.EditComposer ?? AskAIEditComposer,
+    }} />
+  </ThreadPrimitive.Viewport>
+}
+/** Why the last answer stopped or failed (`useAskAI().error`), as an alert; nothing while there is none. */
+export function AskAIError(props: Omit<ComponentPropsWithoutRef<'p'>, 'children' | 'role'>) {
+  const { error } = useAskAI()
+  return error ? <p role="alert" {...props}>{error}</p> : null
+}
+/**
+ * Unstyled chat: messages, the error and the composer, in that order, with replaceable message,
+ * empty-state and composer layouts. For another order or layout, compose `AskAIThread`,
+ * `AskAIMessages`, `AskAIError` and `AskAIComposer` yourself.
+ */
+export function AskAIChat({ components }: AskAIChatProps = {}) {
+  const Composer = components?.Composer ?? AskAIComposer
+  return <AskAIThread components={components}>
+    <AskAIMessages />
+    <AskAIError />
     <Composer />
-  </ThreadPrimitive.Root></MessageRenderingContext.Provider>
+  </AskAIThread>
 }
 
 /** Optional provider form. Consumers may instead call useAskAI().connect(). */
