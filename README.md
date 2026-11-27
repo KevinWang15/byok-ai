@@ -321,7 +321,7 @@ export const Page = () => <AskAIProvider storageKey="my-app:help"><Shell /></Ask
 | Part | Is |
 | --- | --- |
 | `AskAIThread` | The chat's frame (assistant-ui's thread root). Takes `components`, like `AskAIChat`, and native div props. |
-| `AskAIMessages` | The messages, or the thread's `Empty` component while there are none. Native div props go to the scrolling viewport. It follows a streaming answer while the reader is at its bottom and stops once they scroll up, by scrolling itself, so give it a bounded height and `overflow-y: auto`; one that just grows with the page has nothing to scroll. |
+| `AskAIMessages` | The messages, or the thread's `Empty` component while there are none. Native div props, `ref` included, go to the scrolling viewport (for your own scrollbar, say). It follows a streaming answer while the reader is at its bottom and stops once they scroll up, by scrolling itself, so give it a bounded height and `overflow-y: auto`; one that just grows with the page has nothing to scroll. |
 | `AskAIComposer` | The default message box: attached images and page elements, the input, attach and add-from-page buttons, Send or Stop. Use your own `ComposerPrimitive.Root` instead if you like. |
 | `AskAIError` | Why the last answer stopped or failed (`useAskAI().error`), as an alert; nothing while there is none. |
 

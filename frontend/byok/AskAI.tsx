@@ -1,4 +1,4 @@
-import { useContext, useEffect, useId, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { useContext, useEffect, useId, useState, type ComponentProps, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 import { ActionBarPrimitive, AttachmentPrimitive, ThreadPrimitive, ComposerPrimitive, MessagePrimitive, useAui, useAuiState, type ToolCallMessagePartComponent } from '@assistant-ui/react'
 import { Button, Dialog, DialogPanel, DialogTitle, Disclosure, DisclosureButton, DisclosurePanel, Field, Fieldset, Input, Label, Legend } from '@headlessui/react'
 import { AskAIProvider } from './AskAIProvider'
@@ -157,9 +157,9 @@ export function AskAIThread({ components, children, ...props }: AskAIChatProps &
 }
 /**
  * The conversation's messages, or the enclosing thread's `Empty` component while there are none.
- * Use inside `AskAIThread`; native div props go to the scrolling viewport.
+ * Use inside `AskAIThread`; native div props, `ref` included, go to the scrolling viewport.
  */
-export function AskAIMessages(props: ComponentPropsWithoutRef<typeof ThreadPrimitive.Viewport>) {
+export function AskAIMessages(props: ComponentProps<typeof ThreadPrimitive.Viewport>) {
   const components = useContext(MessageRenderingContext)
   const Empty = components?.Empty ?? DefaultEmpty
   return <ThreadPrimitive.Viewport data-byok="messages" {...props}>
