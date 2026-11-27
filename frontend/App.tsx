@@ -13,7 +13,7 @@ const servers = [{ id: 'docs', name: 'Docs and time', url: '/api/mcp' }]
 const pageReaders = { storedKeys: () => Object.keys(localStorage).filter(key => key.startsWith('byok-ai:')).sort() }
 
 function HeadlessExample() {
-  const { connection, providers, connect, disconnect, runtime, busy, error } = useAskAI()
+  const { connection, providers, connect, disconnect, runtime, busy, error, text } = useAskAI()
   const [key, setKey] = useState('')
   const [message, setMessage] = useState('')
   const [setupError, setSetupError] = useState('')
@@ -23,7 +23,7 @@ function HeadlessExample() {
     {!connection ? <form onSubmit={e => {
       e.preventDefault()
       const problem = connect(providers[0], { ...providers[0].defaultValues, apiKey: key })
-      setSetupError(problem ?? '')
+      setSetupError(problem ? text.connectProblem(problem) : '')
       if (!problem) setKey('')
     }}>
       <label>OpenAI API key <input type="password" value={key} onChange={e => setKey(e.target.value)} required /></label>
@@ -37,7 +37,7 @@ function HeadlessExample() {
         <button type="button" disabled={!busy} onClick={() => runtime.thread.cancelRun()}>Stop</button>
         <button type="button" disabled={busy} onClick={disconnect}>Disconnect</button>
       </form>
-      {error && <p role="alert">{error}</p>}
+      {error && <p role="alert">{text.problem(error)}</p>}
       <HeadlessMessages />
     </>}
   </section>

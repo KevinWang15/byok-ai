@@ -5,6 +5,7 @@ import { createEditor, type MarkdownEditor } from 'markora'
 import { createComponentRegistry, createComponentsExtension, defineComponent, type ComponentRegistry } from 'markora-extension-components'
 import { checkAnswerComponents, splitOpenComponent, type AnswerComponent } from './answer-components'
 import { useAskAIOptional } from './context'
+import { defaultText, type AskAIText } from './text'
 
 // Answers rendered by Markora (read only): GitHub-flavored Markdown plus the host's answer
 // components (answer-components.ts). Raw HTML shows as text. Images are never loaded: tool results
@@ -32,14 +33,8 @@ export interface MarkdownProps {
    */
   onOpenLink?: (href: string, event: MouseEvent<HTMLElement>) => void
   className?: string
-  /** Accessible name. Default "Answer". */
+  /** Accessible name. Default: the enclosing AskAIProvider's `text.answer` ("Answer"). */
   label?: string
-}
-
-const MESSAGES = {
-  unavailable: 'This part of the answer cannot be shown.',
-  invalidProps: 'This part of the answer could not be drawn.',
-  renderFailed: 'This part of the answer could not be drawn.',
 }
 const NO_COMPONENTS: readonly AnswerComponent[] = []
 // Markora's defaults are an editor's: a bordered box at least 180 px tall. An answer is text
@@ -50,9 +45,21 @@ const READING = {
 
 type Mount = { id: number; element: HTMLElement; component: AnswerComponent; props: Record<string, unknown> }
 
-export function Markdown({ markdown, components: given, streaming = false, resolveLink, onOpenLink, className, label = 'Answer' }: MarkdownProps) {
-  const fromProvider = useAskAIOptional()?.answerComponents
-  const components = given ?? fromProvider ?? NO_COMPONENTS
+/**
+ * An answer, read only. Its words (`text`: the label, the notes in place of a component or an
+ * image) are the enclosing AskAIProvider's, or English outside one. Markora takes those notes when
+ * it is created, so new ones make a new one.
+ */
+export function Markdown(props: MarkdownProps) {
+  const context = useAskAIOptional()
+  const text = context?.text ?? defaultText
+  const { componentUnavailable, componentFailed, imageNotShown } = text
+  return <MarkdownView key={[componentUnavailable, componentFailed, imageNotShown].join('\n')} {...props}
+    components={props.components ?? context?.answerComponents ?? NO_COMPONENTS} label={props.label ?? text.answer} text={text} />
+}
+
+function MarkdownView({ markdown, components, streaming = false, resolveLink, onOpenLink, className, label, text }:
+  MarkdownProps & { components: readonly AnswerComponent[]; label: string; text: AskAIText }) {
   const host = useRef<HTMLDivElement>(null)
   const editor = useRef<MarkdownEditor | null>(null)
   const registry = useRef<ComponentRegistry | null>(null)
@@ -71,8 +78,10 @@ export function Markdown({ markdown, components: given, streaming = false, resol
     const instance = createEditor({
       // A finished text to read, not a text box: no tab stop of its own; links stay focusable.
       element: host.current!, markdown: '', editable: false, ariaLabel: label, attributes: { role: 'document', tabindex: '-1' },
-      extensions: [createComponentsExtension({ registry: created, messages: MESSAGES })],
-      messages: { imageBlockedByPolicy: 'Image not shown' },
+      extensions: [createComponentsExtension({ registry: created, messages: {
+        unavailable: text.componentUnavailable, invalidProps: text.componentFailed, renderFailed: text.componentFailed,
+      } })],
+      messages: { imageBlockedByPolicy: text.imageNotShown },
       // The image stays in the answer, as a placeholder with its description; nothing is fetched.
       // A link goes where the host resolves it.
       resources: {
@@ -86,9 +95,10 @@ export function Markdown({ markdown, components: given, streaming = false, resol
       registry.current = null
       instance.destroy()
     }
-    // The label is set once; it names the answer, not its content.
+    // Made once: the label changes below, and new notes make a new view (Markdown's key).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useLayoutEffect(() => { editor.current?.updateOptions({ ariaLabel: label }) }, [label])
 
   // Each component renders into the element Markora gives it, through a portal, so it stays in the
   // host's React tree (its context, theme, router).

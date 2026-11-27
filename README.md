@@ -72,6 +72,7 @@ assistant.unmount() // when the host removes it
 | `storageKey` | `byok-ai:conversations` | localStorage key for conversations and the open one. |
 | `connectionKey` | `${storageKey}:connection` | localStorage key for the provider connection. Must differ from `storageKey`. |
 | `title` | `Ask AI` | Dialog title and accessible name. |
+| `text` | English (`defaultText`) | The built-in parts' words, key by key (see Language). |
 | `maxSteps` | `8` | Model steps per answer; each step is one model call that may call tools. |
 | `maxOutputTokens` | provider default | Output token limit per step. |
 | `maxToolCalls` | unlimited | Tool calls per answer; after that the model answers without tools. |
@@ -141,7 +142,7 @@ export function Editor() {
 }
 ```
 
-On the last step, or once `maxToolCalls` is spent, tools are disabled and the model is told to answer from what it has. If the model stops without writing an answer, it is asked once more without tools. An unfinished answer is never silent: `error` (shown in the chat) says the answer stopped at the output limit, that the assistant used all its steps, or that the model finished without an answer. A failed request shows either "The connection was interrupted" or a general message to check key, model, CORS and MCP; raw provider errors are never shown, since some include keys.
+On the last step, or once `maxToolCalls` is spent, tools are disabled and the model is told to answer from what it has. If the model stops without writing an answer, it is asked once more without tools. An unfinished answer is never silent: `error` (shown in the chat) gives the reason: `length` (the output limit), `steps` (all steps used) or `empty` (no answer written). A failed request is `connectionLost`, or `failed`, whose default wording asks to check the key, the model, CORS, and the MCP servers when there are any; raw provider errors are never shown, since some include keys.
 
 ## Workspace
 
@@ -287,15 +288,28 @@ Props are model output, and tool results can steer it: check them in `parse`, an
 
 The fence is the component syntax of [Markora](https://github.com/KevinWang15/markora)'s components extension, which renders the answers (see Custom UI), so documents that embed the same components read the same way.
 
+## Language
+
+Every word the built-in parts show or read out is in `text` (`AskAIText`), English by default (`defaultText`). Give the keys you want to change, in any language, and pass new text when the interface's language changes: every part follows, answers already on screen included. Words with something in them are functions (`removeImage: name => …`, `messageCount: count => …`), so word order and plurals are yours. `locale` formats history's times.
+
+```tsx
+const { t, i18n } = useTranslation()
+<AskAIProvider text={{ locale: i18n.language, placeholder: t('ask.placeholder'), problem: problem => t(`ask.problem.${problem.reason}`, problem) }}>
+```
+
+What goes wrong is a reason, never a sentence, so a host can word it: `useAskAI().error` is an `AskAIProblem` (`length`, `steps`, `empty`, `connectionLost`, `failed`, `pageElementLimit`, `imageLimit`, `imageTooLarge`, `imageUnreadable`, `attachmentFailed`, with what each needs, such as `limit` or `name`), and `connect()` returns a `ConnectProblem`. `text.problem` and `text.connectProblem` word them for `AskAIError` and `AskAISetup`. A conversation whose first message has no words has an empty `title`; `conversationTitle(conversation, text)` names it.
+
+What the model reads (the default system prompt, tool descriptions, notes about images) stays English: it is an instruction, not interface, and the model answers in the language it is asked in.
+
 ## Versions and branches
 
 A conversation is a tree, as in ChatGPT. Regenerating an answer adds another version of it, and editing one of your messages and sending it adds another version of that message, answered anew. The earlier versions stay. Where a message has several versions, `< 2 / 3 >` under it switches between them, and each shows the conversation that followed it. A branch is one path from the first message to a last one; the model sees only the branch it answers on. Editing keeps the message's images and page elements (page elements can be removed while editing). The conversation keeps its first message's title, and the branch shown is saved: reopening the conversation shows it again. Workspace files belong to the conversation, not to a branch: every branch sees the same files.
 
 ## Custom UI
 
-`AskAIProvider` holds state and the assistant-ui runtime and renders no DOM. Inside it, `useAskAI()` returns `title`, `providers`, `mcpServers`, `clientTools` (names), `workspace` (the open conversation's files, when on), `images` (whether images can be attached now), `loadImage(id)`, `open`/`setOpen`, `page`/`setPage` (`'chat' | 'settings' | 'history' | 'tools'`), `connection`, `connect(provider, values)` (returns an error string or `undefined`), `disconnect()`, `conversations`, `activeConversation`, `newConversation()`, `selectConversation(id)`, `deleteConversation(id)` (immediate; confirm first), `busy`, `error`, `storageError` and `runtime`. Send with `runtime.thread.append(text)` and stop with `runtime.thread.cancelRun()`. Changing provider, page or conversation is ignored while `busy`.
+`AskAIProvider` holds state and the assistant-ui runtime and renders no DOM. Inside it, `useAskAI()` returns `title`, `providers`, `mcpServers`, `clientTools` (names), `workspace` (the open conversation's files, when on), `images` (whether images can be attached now), `loadImage(id)`, `open`/`setOpen`, `page`/`setPage` (`'chat' | 'settings' | 'history' | 'tools'`), `connection`, `connect(provider, values)` (returns a `ConnectProblem`, `{ reason: 'busy' | 'required' | 'invalid' }`, or `undefined`), `disconnect()`, `conversations`, `activeConversation`, `newConversation()`, `selectConversation(id)`, `deleteConversation(id)` (immediate; confirm first), `busy`, `error` (an `AskAIProblem`, see Language), `storageError`, `text` (the words in use) and `runtime`. Send with `runtime.thread.append(text)` and stop with `runtime.thread.cancelRun()`. Changing provider, page or conversation is ignored while `busy`.
 
-Compose the parts you need: `AskAITrigger` and `AskAIPanel` (native button and div props), `AskAISetup`, `AskAIChat` (or its parts, `AskAIThread`, `AskAIMessages`, `AskAIComposer` and `AskAIError`; see Layouts), `AskAIHistory`, `AskAITools`, `AskAIMessageContent`, `AskAIMessageActions`, `AskAIBranchPicker` (a message's versions: previous and next around "2 / 5", nothing for one version; `previous` and `next` replace the buttons' contents), `AskAIEditComposer` (a user message being edited), or `AskAIWidget` for the full default UI. For page context: `AskAIAddFromPage` (renders nothing while `pageContext` is off), `AskAIComposerElements` (the composer's elements and their marks on the page) and `AskAIMessageElements` (a user message's), each taking `summary(count)` for the "2 elements" text; `useAskAI()` also gives `pageContext`, `picking` and `pickFromPage()`. For images in a custom composer or message: `AskAIAddImage` (the attach button; renders nothing while images can't be attached), `AskAIComposerImages` (attached images with remove buttons), `AskAIMessageImages` (a user message's images), and `useAskAIImage()` for your own thumbnail; wrap the composer's input in `ComposerPrimitive.AttachmentDropzone` for dropping. `createBrowserAdapter` is the assistant-ui `ChatModelAdapter` behind the runtime, for hosts that build their own; it uses `systemPrompt` as given, so add `answerComponentInstructions(components)` to it yourself.
+Compose the parts you need: `AskAITrigger` and `AskAIPanel` (native button and div props), `AskAISetup`, `AskAIChat` (or its parts, `AskAIThread`, `AskAIMessages`, `AskAIComposer` and `AskAIError`; see Layouts), `AskAIHistory`, `AskAITools`, `AskAIMessageContent`, `AskAIMessageActions`, `AskAIBranchPicker` (a message's versions: previous and next around "2 / 5", nothing for one version; `previous` and `next` replace the buttons' contents), `AskAIEditComposer` (a user message being edited), or `AskAIWidget` for the full default UI. For page context: `AskAIAddFromPage` (renders nothing while `pageContext` is off), `AskAIComposerElements` (the composer's elements and their marks on the page) and `AskAIMessageElements` (a user message's), whose "2 elements" is `text.elementCount`; `useAskAI()` also gives `pageContext`, `picking` and `pickFromPage()`. For images in a custom composer or message: `AskAIAddImage` (the attach button; renders nothing while images can't be attached), `AskAIComposerImages` (attached images with remove buttons), `AskAIMessageImages` (a user message's images), and `useAskAIImage()` for your own thumbnail; wrap the composer's input in `ComposerPrimitive.AttachmentDropzone` for dropping. `createBrowserAdapter` is the assistant-ui `ChatModelAdapter` behind the runtime, for hosts that build their own; it uses `systemPrompt` as given, so add `answerComponentInstructions(components)` to it yourself.
 
 ```tsx
 import { AskAIChat, AskAIHistory, AskAIPanel, AskAIProvider, AskAISetup, AskAITrigger, useAskAI } from '@kevinwang15/byok-ai'
@@ -323,7 +337,7 @@ export const Page = () => <AskAIProvider storageKey="my-app:help"><Shell /></Ask
 | `AskAIThread` | The chat's frame (assistant-ui's thread root). Takes `components`, like `AskAIChat`, and native div props. |
 | `AskAIMessages` | The messages, or the thread's `Empty` component while there are none. Native div props, `ref` included, go to the scrolling viewport (for your own scrollbar, say). It follows a streaming answer while the reader is at its bottom and stops once they scroll up, by scrolling itself, so give it a bounded height and `overflow-y: auto`; one that just grows with the page has nothing to scroll. |
 | `AskAIComposer` | The default message box: attached images and page elements, the input, attach and add-from-page buttons, Send or Stop. Use your own `ComposerPrimitive.Root` instead if you like. |
-| `AskAIError` | Why the last answer stopped or failed (`useAskAI().error`), as an alert; nothing while there is none. |
+| `AskAIError` | What went wrong last (`useAskAI().error`), in `text.problem`'s words, as an alert; nothing while all is well. |
 
 A search-style box on a page, with suggested questions and the answers below it, needs no dialog or trigger: `open` only concerns `AskAIPanel`.
 

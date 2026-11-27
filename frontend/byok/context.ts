@@ -4,11 +4,14 @@ import type { ProviderPreset, ProviderValues, AskAIOptions } from './types'
 import type { Conversation } from './storage'
 import type { Workspace } from './conversation-files'
 import type { AnswerComponent } from './answer-components'
+import type { AskAIProblem, AskAIText, ConnectProblem } from './text'
 
 export type AskAIPage = 'chat' | 'settings' | 'history' | 'tools'
 export interface ProviderConnection { provider: ProviderPreset; values: ProviderValues }
 export interface AskAIContextValue {
   title: string
+  /** The built-in parts' words: the `text` option over the English defaults. */
+  text: AskAIText
   providers: ProviderPreset[]
   mcpServers: NonNullable<AskAIOptions['mcpServers']>
   answerComponents: readonly AnswerComponent[]
@@ -36,7 +39,8 @@ export interface AskAIContextValue {
   page: AskAIPage
   setPage: (page: AskAIPage) => void
   connection?: ProviderConnection
-  connect: (provider: ProviderPreset, values: ProviderValues) => string | undefined
+  /** Connects and saves the provider, or says why not. */
+  connect: (provider: ProviderPreset, values: ProviderValues) => ConnectProblem | undefined
   disconnect: () => void
   conversations: Conversation[]
   activeConversation: Conversation
@@ -45,11 +49,11 @@ export interface AskAIContextValue {
   deleteConversation: (id: string) => void
   busy: boolean
   storageError: boolean
-  error: string
+  /** Why the last answer stopped short or failed, or why the last image or page element couldn't be added. */
+  error: AskAIProblem | undefined
   runtime: AssistantRuntime
 }
 export const AskAIContext = createContext<AskAIContextValue | null>(null)
-/** State, actions, and the assistant-ui runtime, without any UI or CSS. */
 /** The enclosing AskAIProvider's state, or null outside one. */
 export const useAskAIOptional = () => useContext(AskAIContext)
 export function useAskAI(): AskAIContextValue {

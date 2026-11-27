@@ -38,7 +38,7 @@ function randomId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
 }
 export function newConversation(id = randomId()): Conversation {
-  return { id, title: 'New conversation', updatedAt: Date.now(), messages: [], headId: null, draft: '' }
+  return { id, title: '', updatedAt: Date.now(), messages: [], headId: null, draft: '' }
 }
 /** The branch shown: its messages from the first to the last (`headId`). */
 export function conversationBranch(conversation: Pick<Conversation, 'messages' | 'headId'>): ThreadMessage[] {

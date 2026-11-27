@@ -3,6 +3,7 @@ import type { LanguageModel, ToolSet } from 'ai'
 import type { TextMessagePartComponent, ToolCallMessagePartComponent } from '@assistant-ui/react'
 import type { AnswerComponent } from './answer-components'
 import type { PageReaders } from './page-context'
+import type { AskAIText } from './text'
 
 export type ProviderValues = Record<string, string>
 export interface ProviderFormProps {
@@ -87,7 +88,13 @@ export interface AskAIOptions {
    * conversations under its `storageKey`.
    */
   connectionKey?: string
+  /** The assistant's name: the panel's label, and the trigger's. Default "Ask AI". */
   title?: string
+  /**
+   * The words of the built-in parts, key by key over the English defaults (`defaultText`), such as
+   * in the interface's language. Pass new text when the language changes: every part follows.
+   */
+  text?: Partial<AskAIText>
   /** Model steps per answer, each a model call that may call tools. Default 8. */
   maxSteps?: number
   /** Output token limit per model step; the provider's default when omitted. */

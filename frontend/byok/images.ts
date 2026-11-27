@@ -1,5 +1,6 @@
 import type { AttachmentAdapter, CompleteAttachment, PendingAttachment } from '@assistant-ui/react'
 import type { ImageStore } from './conversation-files'
+import { ProblemError } from './text'
 
 // Images the user attaches to a message (the `images` option). An image is prepared when it is
 // added (resized to what models read, in a format they all take), saved in the conversation's
@@ -33,9 +34,9 @@ export const isImageAttachment = (attachment: { type?: string; contentType?: str
  * edge is at most `longEdge` and encoded as PNG (sources with transparency) or JPEG. Browser only.
  */
 export async function prepareImage(file: File): Promise<Blob> {
-  if (file.size > IMAGE_LIMITS.inputBytes) throw new Error(`"${file.name}" is larger than ${IMAGE_LIMITS.inputBytes / 1024 / 1024} MB.`)
+  if (file.size > IMAGE_LIMITS.inputBytes) throw new ProblemError({ reason: 'imageTooLarge', name: file.name, megabytes: IMAGE_LIMITS.inputBytes / 1024 / 1024 })
   let bitmap: ImageBitmap
-  try { bitmap = await createImageBitmap(file) } catch { throw new Error(`"${file.name}" could not be read as an image.`) }
+  try { bitmap = await createImageBitmap(file) } catch { throw new ProblemError({ reason: 'imageUnreadable', name: file.name }) }
   try {
     const scale = Math.min(1, IMAGE_LIMITS.longEdge / Math.max(bitmap.width, bitmap.height))
     if (scale === 1 && SENT_TYPES.includes(file.type) && file.size <= IMAGE_LIMITS.bytes) return file
@@ -75,7 +76,7 @@ export function imageAttachmentAdapter(options: {
   return {
     accept: ACCEPT,
     async add({ file }) {
-      if (options.attached() + preparing >= IMAGE_LIMITS.perMessage) throw new Error(`A message can hold at most ${IMAGE_LIMITS.perMessage} images.`)
+      if (options.attached() + preparing >= IMAGE_LIMITS.perMessage) throw new ProblemError({ reason: 'imageLimit', limit: IMAGE_LIMITS.perMessage })
       preparing++
       try {
         const image = await prepare(file)

@@ -2,6 +2,7 @@ import { streamText, stepCountIs, ToolChoiceViolationError, type ModelMessage, t
 import { createMCPClient, type MCPClient } from '@ai-sdk/mcp'
 import type { ChatModelAdapter, ThreadMessage, ThreadAssistantMessagePart } from '@assistant-ui/react'
 import type { McpServerConfig, ProviderPreset, ProviderValues } from './types'
+import type { AskAIProblem } from './text'
 import type { ImageStore, Workspace } from './conversation-files'
 import { isImageAttachment } from './images'
 import type { ScriptRunner } from './script-runner'
@@ -56,16 +57,6 @@ export async function toModelMessages(messages: readonly ThreadMessage[], option
 /** Added to the system prompt for the step that must answer: the tool budget is spent, or it is the last step. */
 export const FINAL_STEP_INSTRUCTION = 'No more tool calls are available for this answer. Answer now from the results you have, and say briefly what you could not check.'
 
-/** Shown when a response ended without finishing: cut off by the output limit, or out of steps. */
-export const INCOMPLETE_MESSAGES = {
-  length: 'The answer stopped at the model\'s output limit. Ask it to continue.',
-  steps: 'The assistant used all its steps before finishing. Ask it to continue, or narrow the question.',
-  empty: 'The model finished without writing an answer. Try again.',
-}
-
-/** Shown when the network dropped during a response, as opposed to a provider or MCP failure. */
-export const CONNECTION_LOST_MESSAGE = 'The connection was interrupted. Try again.'
-const FAILURE_MESSAGE = 'Could not complete the response. Check your key, model, provider CORS support, and MCP connection, then try again.'
 // fetch rejects with a TypeError when the network fails, in browsers and in Node.
 const isNetworkFailure = (error: unknown) => error instanceof TypeError || (typeof navigator !== 'undefined' && navigator.onLine === false)
 
@@ -86,11 +77,13 @@ export function createBrowserAdapter(options: {
   pageElements?: PageElementRegistry
   // The host's readers for page sources, read when a read starts, so it uses the latest.
   pageReaders?: () => PageReaders
-  systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number; onError: (message: string) => void
+  systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number
+  // Called with undefined when a run starts, then with why it stopped short or failed, if it did.
+  onError: (problem: AskAIProblem | undefined) => void
 }): ChatModelAdapter {
   return {
     async *run({ messages, abortSignal }) {
-      options.onError('')
+      options.onError(undefined)
       const clients: MCPClient[] = []
       const content: ThreadAssistantMessagePart[] = []
       const close = () => { for (const client of clients) void client.close().catch(() => {}) }
@@ -197,13 +190,13 @@ export function createBrowserAdapter(options: {
           }))
         }
         // How the answer ended: 'length' was cut off; 'tool-calls' means the step limit ended the loop.
-        if (finish === 'length') options.onError(INCOMPLETE_MESSAGES.length)
-        else if (finish === 'tool-calls') options.onError(INCOMPLETE_MESSAGES.steps)
-        else if (!answered()) options.onError(INCOMPLETE_MESSAGES.empty)
+        if (finish === 'length') options.onError({ reason: 'length' })
+        else if (finish === 'tool-calls') options.onError({ reason: 'steps' })
+        else if (!answered()) options.onError({ reason: 'empty' })
       } catch (error) {
         if (!abortSignal.aborted) {
           // Raw provider errors are neither shown nor attached: some carry request headers or URLs with keys.
-          options.onError(isNetworkFailure(error) ? CONNECTION_LOST_MESSAGE : FAILURE_MESSAGE)
+          options.onError(isNetworkFailure(error) ? { reason: 'connectionLost' } : { reason: 'failed', mcp: options.servers.length > 0 })
           // eslint-disable-next-line preserve-caught-error
           throw new Error('Provider or MCP request failed.')
         }

@@ -13,6 +13,7 @@ import { workerScriptRunner } from './script-runner'
 import { conversationBranch, DEFAULT_STORAGE_KEY, isEmptyConversation, loadConversations, newConversation, saveConversations, type Conversation, type StoredConversations } from './storage'
 import { defaultConnectionKey, loadConnection, sameConnection, saveConnection, subscribeConnection, type StoredConnection } from './connection'
 import type { AskAIProviderProps, McpServerConfig, ProviderPreset, ProviderValues } from './types'
+import { defaultText, ProblemError, type AskAIProblem, type ConnectProblem } from './text'
 
 const EMPTY_SERVERS: McpServerConfig[] = []
 const NO_COMPONENTS: readonly AnswerComponent[] = []
@@ -35,7 +36,7 @@ function Runtime({ state, clientTools, files, workspace, images, pageElements, p
   systemPrompt: string; maxSteps: number; maxOutputTokens?: number; maxToolCalls?: number
   save: (conversation: Conversation) => void; onBusy: (busy: boolean) => void; children: ReactNode
 }) {
-  const [error, setError] = useState('')
+  const [error, setError] = useState<AskAIProblem>()
   const { connection, mcpServers, activeConversation } = state
   // Attaching is offered while connected to a provider whose model takes images.
   const attaching = images && connection?.provider.acceptsImages === true
@@ -84,7 +85,8 @@ function Runtime({ state, clientTools, files, workspace, images, pageElements, p
   const runtime = useLocalRuntime(adapter, { initialMessages: conversationBranch(activeConversation), adapters: { attachments } })
   useLayoutEffect(() => { runtimeRef.current = runtime })
   // An image that can't be attached (too many, unreadable) says why, where answers' errors show.
-  useEffect(() => runtime.thread.composer.unstable_on('attachmentAddError', event => setError(event.message)), [runtime])
+  useEffect(() => runtime.thread.composer.unstable_on('attachmentAddError', event =>
+    setError(event.error instanceof ProblemError ? event.error.problem : { reason: 'attachmentFailed' })), [runtime])
   // Choosing an element of the page for the composer. Opening another conversation cancels it, as
   // it drops what the composer holds.
   const [picking, setPicking] = useState(false)
@@ -94,7 +96,7 @@ function Runtime({ state, clientTools, files, workspace, images, pageElements, p
     if (!pageElements || pickingRef.current) return
     const { composer } = runtime.thread
     const added = () => composer.getState().attachments.filter(isPageElementAttachment)
-    const full = `A message can hold at most ${PAGE_CONTEXT_LIMITS.perMessage} elements from the page.`
+    const full: AskAIProblem = { reason: 'pageElementLimit', limit: PAGE_CONTEXT_LIMITS.perMessage }
     if (added().length >= PAGE_CONTEXT_LIMITS.perMessage) return setError(full)
     const controller = new AbortController()
     pickingRef.current = controller
@@ -138,11 +140,11 @@ function Runtime({ state, clientTools, files, workspace, images, pageElements, p
       const changed = draft !== activeRef.current.draft || all.length !== saved.length || all.some((message, index) => message !== saved[index])
       saved = all
       // The title is the first message's, whichever branch is shown: the conversation keeps its name.
+      // A message of images alone has none (conversationTitle names it).
       const first = all.find(m => m.role === 'user')
       const attached = first?.role === 'user' ? first.attachments : []
       const title = (first?.content.flatMap(p => p.type === 'text' ? [p.text] : []).join(' ')
-        || (attached.some(isImageAttachment) ? 'Image' : attached.find(isPageElementAttachment)?.name)
-        || 'New conversation').slice(0, 48)
+        || attached.find(isPageElementAttachment)?.name || '').slice(0, 48)
       save({
         id: activeConversation.id, title, draft,
         messages: tree.messages.map(({ message, parentId }) => ({ message, parentId })), headId: tree.headId ?? null,
@@ -178,7 +180,7 @@ function Runtime({ state, clientTools, files, workspace, images, pageElements, p
 }
 
 function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVERS, clientTools = NO_TOOLS, workspace = false, images = false, pageContext = false, pageReaders = NO_READERS, systemPrompt: basePrompt = DEFAULT_PROMPT,
-  answerComponents = NO_COMPONENTS, componentInstructions = true, storageKey = DEFAULT_STORAGE_KEY, connectionKey = defaultConnectionKey(storageKey), title = 'Ask AI', maxSteps = 8, maxOutputTokens, maxToolCalls, children }: AskAIProviderProps) {
+  answerComponents = NO_COMPONENTS, componentInstructions = true, storageKey = DEFAULT_STORAGE_KEY, connectionKey = defaultConnectionKey(storageKey), title = 'Ask AI', text: given, maxSteps = 8, maxOutputTokens, maxToolCalls, children }: AskAIProviderProps) {
   if (connectionKey === storageKey) throw new Error('connectionKey must differ from storageKey.')
   // The model is told about the answer components after the host's own prompt.
   const systemPrompt = useMemo(() => [basePrompt, componentInstructions ? answerComponentInstructions(answerComponents) : '']
@@ -232,20 +234,21 @@ function ProviderState({ providers = defaultProviders, mcpServers = EMPTY_SERVER
     commit({ ...storeRef.current, activeConversationId: id })
     updatePage('chat')
   }
-  const connect = (provider: ProviderPreset, values: ProviderValues) => {
-    if (busy) return 'Stop the current response before changing providers.'
+  const text = useMemo(() => ({ ...defaultText, ...given }), [given])
+  const connect = (provider: ProviderPreset, values: ProviderValues): ConnectProblem | undefined => {
+    if (busy) return { reason: 'busy' }
     for (const field of provider.fields ?? []) {
-      if (field.required && !values[field.name]?.trim()) return field.label + ' is required.'
+      if (field.required && !values[field.name]?.trim()) return { reason: 'required', field: field.label }
     }
-    const problem = provider.validate?.(values)
-    if (problem) return problem
+    const message = provider.validate?.(values)
+    if (message) return { reason: 'invalid', message }
     const savedValues = { ...values }
     persistConnection({ providerId: provider.id, values: savedValues })
     setConnection({ provider, values: savedValues })
     updatePage('chat')
   }
   const state: State = {
-    title, providers, mcpServers, answerComponents, clientTools: Object.keys(clientTools), workspace: openWorkspace, loadImage, open, setOpen, page, connection, connect,
+    title, text, providers, mcpServers, answerComponents, clientTools: Object.keys(clientTools), workspace: openWorkspace, loadImage, open, setOpen, page, connection, connect,
     conversations: store.conversations, activeConversation, busy, storageError,
     setPage: next => { if (!busy) updatePage(next) },
     disconnect: () => { if (!busy) { persistConnection(undefined); setConnection(undefined); updatePage('settings') } },

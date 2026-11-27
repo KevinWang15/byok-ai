@@ -161,7 +161,7 @@ test('the adapter offers the workspace tools when asked, and reserves the "works
   } }) }) })
   const provider = { id: 'test', name: 'Test', description: '', defaultValues: {}, createModel: () => model }
   const store = memoryConversationFiles()
-  const adapter = (servers: { id: string; name: string; url: string }[], errors: string[]) => createBrowserAdapter({
+  const adapter = (servers: { id: string; name: string; url: string }[], errors: unknown[]) => createBrowserAdapter({
     provider, values: {}, servers, systemPrompt: '', maxSteps: 2, onError: e => errors.push(e),
     workspace: { open: () => store.workspace('c'), run: nodeRunner },
   })
@@ -169,7 +169,7 @@ test('the adapter offers the workspace tools when asked, and reserves the "works
   const offered = (model.doStreamCalls[0].tools ?? []).map(t => t.name).sort()
   assert.deepEqual(offered, ['workspace__delete_file', 'workspace__list_files', 'workspace__read_file', 'workspace__run_javascript', 'workspace__save_tool_result', 'workspace__write_file'])
 
-  const errors: string[] = []
+  const errors: unknown[] = []
   await assert.rejects(async () => {
     for await (const _ of adapter([{ id: 'workspace', name: 'W', url: 'http://127.0.0.1:1/mcp' }], errors).run(runOptions) as AsyncGenerator<ChatModelRunResult>) { void _ }
   })

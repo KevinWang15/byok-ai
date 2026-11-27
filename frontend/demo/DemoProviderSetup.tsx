@@ -1,22 +1,22 @@
 import { useId, useState } from 'react'
 import { Button, Field, Fieldset, Input, Label, Legend } from '@headlessui/react'
-import { useAskAI, type ProviderPreset, type ProviderValues } from '../byok'
+import { useAskAI, type ConnectProblem, type ProviderPreset, type ProviderValues } from '../byok'
 import { DemoIcon } from './DemoIcon'
 
 /** Consumer-owned layout using the library's provider contracts and connection actions. */
 export function DemoProviderSetup() {
-  const { providers, connection, connect, disconnect, setPage, busy } = useAskAI()
+  const { providers, connection, connect, disconnect, setPage, busy, text } = useAskAI()
   const [selected, setSelected] = useState<ProviderPreset | undefined>(connection?.provider)
   const [values, setValues] = useState<ProviderValues>(connection?.values ?? {})
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>({})
-  const [error, setError] = useState('')
+  const [error, setError] = useState<ConnectProblem>()
   const choiceId = useId()
   const CustomForm = selected?.Form
   const choose = (provider?: ProviderPreset) => {
     setSelected(provider)
     setValues(provider && connection && provider.id === connection.provider.id ? { ...connection.values } : { ...provider?.defaultValues })
     setVisibleFields({})
-    setError('')
+    setError(undefined)
   }
   return <section className="demo-provider-settings" aria-label="Provider configuration">
     <h2>{selected ? connection ? 'Provider settings' : 'Connect your provider' : 'Choose an AI provider'}</h2>
@@ -30,7 +30,7 @@ export function DemoProviderSetup() {
       <p className="provider-description">{selected.description}</p>
       <form onSubmit={event => {
         event.preventDefault()
-        setError(connect(selected, values) ?? '')
+        setError(connect(selected, values))
       }}>
         <Fieldset disabled={busy}>
           <Legend className="demo-sr-only">Provider credentials</Legend>
@@ -49,7 +49,7 @@ export function DemoProviderSetup() {
             </div>
           </Field>)}
         </Fieldset>
-        {error && <p role="alert">{error}</p>}
+        {error && <p role="alert">{text.connectProblem(error)}</p>}
         <p className="provider-storage-note"><DemoIcon name="storage" size={15} /><span>Settings, including your API key, are saved in this browser’s localStorage.</span></p>
         <div className="provider-actions">
           {connection && <Button type="button" className="provider-cancel" disabled={busy} onClick={() => setPage('chat')}>Cancel</Button>}
