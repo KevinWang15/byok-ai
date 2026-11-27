@@ -1346,3 +1346,30 @@ test('the chat parts compose into an inline layout: the box above, a suggestion 
   expect(saved.conversations).toHaveLength(1)
   expect(await page.evaluate(() => localStorage.getItem('byok-ai:conversations'))).toBeNull()
 })
+
+test('an assistant can unmount, mid-answer or not, and its conversation is there when it mounts again', async ({ page }) => {
+  const errors: string[] = []
+  page.on('pageerror', e => errors.push(e.message))
+  await seed(page, {})
+  let calls = 0
+  // The first answer arrives; the second never does, so the example is hidden while it runs.
+  await page.route(MODEL, route => ++calls === 1 ? route.fulfill(answer('Every OpenAI-compatible endpoint works.')) : undefined)
+  await page.goto('/')
+  const inline = page.getByRole('region', { name: 'Inline layout example' })
+  const toggle = inline.getByRole('button', { name: /the example$/ })
+  await inline.getByRole('button', { name: 'Which providers can I use?' }).click()
+  await expect(inline.locator('[data-byok="message"][data-role="assistant"]')).toContainText('Every OpenAI-compatible endpoint works.')
+  await toggle.click()
+  await expect(inline.locator('[data-byok="chat"]')).toHaveCount(0)
+  await toggle.click()
+  await expect(inline.locator('[data-byok="message"][data-role="assistant"]')).toContainText('Every OpenAI-compatible endpoint works.')
+  await inline.getByRole('textbox', { name: 'Message', exact: true }).fill('And Anthropic?')
+  await inline.getByRole('textbox', { name: 'Message', exact: true }).press('Enter')
+  // Hidden at once, while the answer has only just started: the question is kept all the same.
+  await toggle.click()
+  await expect(inline.locator('[data-byok="chat"]')).toHaveCount(0)
+  await toggle.click()
+  await expect(inline.locator('[data-byok="message"][data-role="user"]')).toHaveCount(2)
+  await expect(inline.getByRole('button', { name: 'Stop response' })).toHaveCount(0)
+  expect(errors).toEqual([])
+})

@@ -103,10 +103,13 @@ function InlineAsk() {
   </AskAIThread>
 }
 function InlineExample() {
+  // Like a page of an app the reader can leave: hiding it unmounts the assistant, conversations kept.
+  const [shown, setShown] = useState(true)
   return <section className="demo-sandbox" aria-label="Inline layout example">
     <span className="demo-eyebrow">INLINE LAYOUT</span><h2>Put the chat in the page.</h2>
     <p>The same parts as the dialog's chat, arranged by the page: a search-style box first, answers below. It shares the dialog's connection and keeps its own conversations.</p>
-    <AskAIProvider mcpServers={servers} storageKey="byok-ai:inline-demo" connectionKey="byok-ai:conversations:connection"><InlineAsk /></AskAIProvider>
+    <button type="button" className="demo-inline-toggle" onClick={() => setShown(!shown)}>{shown ? 'Hide the example' : 'Show the example'}</button>
+    {shown && <AskAIProvider mcpServers={servers} storageKey="byok-ai:inline-demo" connectionKey="byok-ai:conversations:connection"><InlineAsk /></AskAIProvider>}
   </section>
 }
 

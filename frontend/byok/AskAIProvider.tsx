@@ -165,7 +165,11 @@ function Runtime({ state, clientTools, files, workspace, images, pageElements, p
     return () => {
       unsubscribe(); unsubscribeDraft(); clearTimeout(timer)
       window.removeEventListener('pagehide', snapshot)
-      runtime.thread.cancelRun(); onBusy(false)
+      // Leaving a conversation stops its answer. When the assistant unmounts, assistant-ui may have
+      // detached the thread already (which stops the answer) and left a placeholder in its place,
+      // on which any action throws: so stop only an answer that is running.
+      if (runtime.thread.getState().isRunning) runtime.thread.cancelRun()
+      onBusy(false)
     }
   }, [runtime, activeConversation.id, save, onBusy])
   return <AssistantRuntimeProvider runtime={runtime}>
